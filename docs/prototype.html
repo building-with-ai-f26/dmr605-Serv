@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Serv · Build 1 prototype</title>
+<style>
+  :root { --ink:#1b1f24; --muted:#5f6b76; --line:#e3e7eb; --bg:#f6f7f9; --card:#fff; --brand:#0f766e; --brand-soft:#e6f4f2; --warn:#b45309; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; color:var(--ink); background:var(--bg); }
+  header { background:var(--card); border-bottom:1px solid var(--line); padding:14px 20px; display:flex; align-items:center; gap:10px; }
+  header b { font-size:20px; color:var(--brand); }
+  header span { color:var(--muted); font-size:13px; }
+  main { max-width:560px; margin:0 auto; padding:20px 16px 48px; }
+  h2 { font-size:20px; margin:4px 0 12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:12px; }
+  label { display:block; font-size:13px; color:var(--muted); margin:10px 0 4px; }
+  input, select { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font:inherit; }
+  button { font:inherit; border:0; border-radius:8px; padding:11px 16px; background:var(--brand); color:#fff; cursor:pointer; width:100%; margin-top:14px; }
+  button.ghost { background:transparent; color:var(--brand); border:1px solid var(--brand); }
+  .pro { display:flex; gap:12px; align-items:flex-start; cursor:pointer; }
+  .pro:hover { border-color:var(--brand); }
+  .avatar { width:44px; height:44px; border-radius:50%; background:var(--brand-soft); color:var(--brand); display:grid; place-items:center; font-weight:700; flex:none; }
+  .row { display:flex; justify-content:space-between; gap:8px; }
+  .muted { color:var(--muted); font-size:14px; }
+  .badge { display:inline-block; font-size:12px; background:var(--brand-soft); color:var(--brand); border-radius:999px; padding:2px 8px; margin-right:4px; }
+  .price { font-weight:700; }
+  .slots { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+  .slot { width:auto; margin:0; background:var(--card); color:var(--ink); border:1px solid var(--line); }
+  .slot.on { background:var(--brand); color:#fff; border-color:var(--brand); }
+  .steps { list-style:none; padding:0; margin:0; }
+  .steps li { padding:8px 0 8px 28px; position:relative; color:var(--muted); }
+  .steps li::before { content:""; position:absolute; left:6px; top:14px; width:10px; height:10px; border-radius:50%; background:var(--line); }
+  .steps li.done { color:var(--ink); }
+  .steps li.done::before { background:var(--brand); }
+  .stars button { width:auto; margin:0 4px 0 0; padding:4px 8px; font-size:22px; background:none; color:#c9ced3; }
+  .stars button.on { color:#f59e0b; }
+  .note { font-size:12px; color:var(--warn); margin-top:8px; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<header><b>Serv</b><span>Build 1 throwaway prototype · fake data, no real payments</span></header>
+<main>
+
+  <!-- 1. Describe the job -->
+  <section id="s-job">
+    <h2>What needs fixing?</h2>
+    <div class="card">
+      <label for="zip">Your ZIP code</label>
+      <input id="zip" inputmode="numeric" maxlength="5" placeholder="11211" value="11211">
+      <label for="job">Job</label>
+      <select id="job"></select>
+      <button id="find">See verified pros</button>
+      <p id="zipmsg" class="note hidden"></p>
+    </div>
+  </section>
+
+  <!-- 2. Pick a pro -->
+  <section id="s-pros" class="hidden">
+    <h2>Verified pros near <span id="zipname"></span></h2>
+    <p class="muted">Every pro has passed an ID check. Prices are fixed before you book.</p>
+    <div id="pros"></div>
+    <button class="ghost" data-back="s-job">Back</button>
+  </section>
+
+  <!-- 3. Book a time -->
+  <section id="s-book" class="hidden">
+    <h2>Book <span id="bk-name"></span></h2>
+    <div class="card">
+      <div class="row"><span id="bk-job"></span><span class="price" id="bk-price"></span></div>
+      <label>Pick a time</label>
+      <div class="slots" id="slots"></div>
+      <label for="card">Card (prototype only, nothing is charged)</label>
+      <input id="card" placeholder="4242 4242 4242 4242">
+      <button id="pay" disabled>Book and hold payment</button>
+      <p class="muted" style="margin:8px 0 0">Your payment is held and only released to the pro after you confirm the job is done.</p>
+    </div>
+    <button class="ghost" data-back="s-pros">Back</button>
+  </section>
+
+  <!-- 4. Track and confirm -->
+  <section id="s-track" class="hidden">
+    <h2>Your booking</h2>
+    <div class="card">
+      <div class="row"><b id="tr-title"></b><span class="price" id="tr-price"></span></div>
+      <p class="muted" id="tr-when"></p>
+      <ul class="steps" id="steps"></ul>
+      <button id="advance">Simulate: pro accepts</button>
+    </div>
+  </section>
+
+  <!-- 5. Rate -->
+  <section id="s-rate" class="hidden">
+    <h2>How did it go?</h2>
+    <div class="card">
+      <p class="muted">Payment released to <span id="rt-name"></span>. Rate the job:</p>
+      <div class="stars" id="stars"></div>
+      <button id="done" disabled>Submit rating</button>
+    </div>
+  </section>
+
+  <section id="s-thanks" class="hidden">
+    <div class="card"><h2>Thanks!</h2><p class="muted">Your rating helps neighbors pick the right pro.</p>
+    <button id="restart" class="ghost">Book another job</button></div>
+  </section>
+</main>
+
+<script>
+// All data is invented for the prototype.
+const AREAS = { "112": "Brooklyn", "100": "Manhattan", "101": "Manhattan", "102": "Manhattan" };
+const JOBS = ["Fix a leaky faucet", "Mount a TV or shelves", "Assemble furniture", "Patch and paint a wall"];
+const PROS = [
+  { name: "Marco R.", hood: "Williamsburg", area: "Brooklyn", rating: 4.9, jobs: 132, prices: [95, 120, 90, 150] },
+  { name: "Aisha K.", hood: "Bed-Stuy", area: "Brooklyn", rating: 4.8, jobs: 87, prices: [90, 110, 85, 140] },
+  { name: "Tomás G.", hood: "East Village", area: "Manhattan", rating: 4.7, jobs: 210, prices: [110, 130, 100, 165] },
+  { name: "Dev S.", hood: "Park Slope", area: "Brooklyn", rating: 4.6, jobs: 58, prices: [85, 115, 80, 135] },
+  { name: "Grace L.", hood: "Harlem", area: "Manhattan", rating: 4.8, jobs: 96, prices: [100, 120, 95, 155] },
+  { name: "Lena P.", hood: "Upper West Side", area: "Manhattan", rating: 5.0, jobs: 41, prices: [105, 125, 95, 160] },
+];
+const SLOTS = ["Tue 9am", "Tue 2pm", "Wed 10am", "Thu 6pm", "Sat 11am"];
+const STEPS = ["Booked, payment held", "Pro accepted", "Pro checked in", "Job marked done", "You confirmed, payment released"];
+
+const $ = id => document.getElementById(id);
+const state = { zip: "", area: "", job: 0, pro: null, slot: null, step: 0, stars: 0 };
+const show = id => document.querySelectorAll("main > section").forEach(s => s.classList.toggle("hidden", s.id !== id));
+
+JOBS.forEach((j, i) => $("job").add(new Option(j, i)));
+document.querySelectorAll("[data-back]").forEach(b => b.onclick = () => show(b.dataset.back));
+
+$("find").onclick = () => {
+  state.zip = $("zip").value.trim();
+  state.area = AREAS[state.zip.slice(0, 3)];
+  state.job = +$("job").value;
+  const msg = $("zipmsg");
+  if (!/^\d{5}$/.test(state.zip) || !state.area) {
+    msg.textContent = "Serv is only in Brooklyn and Manhattan for now.";
+    msg.classList.remove("hidden");
+    return;
+  }
+  msg.classList.add("hidden");
+  $("zipname").textContent = `${state.zip} (${state.area})`;
+  $("pros").innerHTML = PROS.map((p, i) => p.area !== state.area ? "" : `
+    <div class="card pro" data-i="${i}">
+      <div class="avatar">${p.name[0]}</div>
+      <div style="flex:1">
+        <div class="row"><b>${p.name}</b><span class="price">$${p.prices[state.job]}</span></div>
+        <div class="muted">${p.hood} · ★ ${p.rating.toFixed(1)} (${p.jobs} jobs)</div>
+        <span class="badge">ID verified</span><span class="badge">Payment protected</span>
+      </div>
+    </div>`).join("");
+  document.querySelectorAll(".pro").forEach(el => el.onclick = () => pickPro(+el.dataset.i));
+  show("s-pros");
+};
+
+function pickPro(i) {
+  state.pro = PROS[i]; state.slot = null;
+  $("bk-name").textContent = state.pro.name;
+  $("bk-job").textContent = JOBS[state.job];
+  $("bk-price").textContent = "$" + state.pro.prices[state.job];
+  $("slots").innerHTML = SLOTS.map(s => `<button class="slot">${s}</button>`).join("");
+  document.querySelectorAll(".slot").forEach(b => b.onclick = () => {
+    document.querySelectorAll(".slot").forEach(x => x.classList.remove("on"));
+    b.classList.add("on"); state.slot = b.textContent; $("pay").disabled = false;
+  });
+  $("pay").disabled = true;
+  show("s-book");
+}
+
+$("pay").onclick = () => {
+  state.step = 1;
+  $("tr-title").textContent = `${JOBS[state.job]} · ${state.pro.name}`;
+  $("tr-price").textContent = "$" + state.pro.prices[state.job];
+  $("tr-when").textContent = `${state.slot} · ${state.area}`;
+  renderSteps(); show("s-track");
+};
+
+const ADVANCE = ["Simulate: pro accepts", "Simulate: pro checks in", "Simulate: pro marks done", "Confirm job is done"];
+function renderSteps() {
+  $("steps").innerHTML = STEPS.map((s, i) => `<li class="${i < state.step ? "done" : ""}">${s}</li>`).join("");
+  $("advance").textContent = ADVANCE[state.step - 1] || "";
+}
+$("advance").onclick = () => {
+  state.step++;
+  if (state.step > 4) { state.step = 5; $("rt-name").textContent = state.pro.name; renderStars(); show("s-rate"); return; }
+  renderSteps();
+};
+
+function renderStars() {
+  $("stars").innerHTML = [1,2,3,4,5].map(n => `<button class="${n <= state.stars ? "on" : ""}" data-n="${n}">★</button>`).join("");
+  document.querySelectorAll("#stars button").forEach(b => b.onclick = () => { state.stars = +b.dataset.n; $("done").disabled = false; renderStars(); });
+}
+$("done").onclick = () => show("s-thanks");
+$("restart").onclick = () => { state.stars = 0; $("done").disabled = true; show("s-job"); };
+</script>
+</body>
+</html>
