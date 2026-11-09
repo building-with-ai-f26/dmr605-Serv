@@ -1,10 +1,10 @@
-# [Project Name]
+# Serv
 
-> **One-line pitch:** [Who is this for, and what job does it do for them?]
+> **One-line pitch:** For NYC renters who need a small home repair done: find an ID-verified, rated local pro, book a time, and pay only when the job is done.
 
-- **Builder:** [Your Name] (`@github-handle`)
+- **Builder:** D (`@dav-ro-11`)
 - **Pod:** [Pod Name / Number]
-- **Product Page & Living PRD:** [Add your GitHub Pages URL]
+- **Product Page & Living PRD:** https://building-with-ai-f26.github.io/dmr605-Sully/
 - **App:** runs locally through Week 4; add a cloud URL in Build 5.
 
 ## Start here: Build 1
