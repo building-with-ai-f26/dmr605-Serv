@@ -4,7 +4,7 @@
 
 - **Builder:** D (`@dav-ro-11`)
 - **Pod:** [Pod Name / Number]
-- **Product Page & Living PRD:** https://building-with-ai-f26.github.io/dmr605-Sully/
+- **Product Page & Living PRD:** https://building-with-ai-f26.github.io/dmr605-Serv/
 - **App:** runs locally through Week 4; add a cloud URL in Build 5.
 
 ## Start here: Build 1
