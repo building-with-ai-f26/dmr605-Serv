@@ -1,0 +1,11 @@
+{
+  "name": "serv-build2",
+  "private": true,
+  "type": "module",
+  "description": "Serv Build 2: a tenant reports a repair, a real AI call triages it against the building file, the owner approves a set price in one tap.",
+  "scripts": {
+    "start": "node app/server.mjs",
+    "test": "node --test app/test/app.test.mjs"
+  },
+  "engines": { "node": ">=20" }
+}

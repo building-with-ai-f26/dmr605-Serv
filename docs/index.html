@@ -5,9 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Serv · Building with AI (Fall 2026)</title>
 
-  <!-- Week 1: create your PostHog account only.
-       Build 2: paste your project's current PostHog web snippet here,
-       then install analytics in the local app and verify events. -->
+  <!-- PostHog web snippet (Build 2): pageviews, clicks (autocapture) and session replay.
+       The token below is the public project token, which can only send events. -->
+  <script>
+    !function(t,e){var o,n,p,r;e.__SV||(window.posthog&&window.posthog.__loaded)||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags identify setPersonProperties group resetGroups reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug on onFeatureFlags onSessionId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+    posthog.init('phc_nhLfda5VvpsosBJEKraGbNVpVVNNBifV4fVQ4R5NkR2g', {
+      api_host: 'https://us.i.posthog.com',
+      person_profiles: 'identified_only',
+      capture_pageview: true,
+      autocapture: true,
+      disable_session_recording: false
+    });
+  </script>
 
   <style>
     :root {
@@ -145,20 +154,24 @@
     <header>
       <span class="eyebrow">NYU Stern · Building with AI · Fall 2026</span>
       <h1>Serv</h1>
-      <p class="tagline">For NYC renters who need a small home repair done, Serv finds an ID-verified, rated local pro, books a time, and holds payment until the job is done.</p>
+      <p class="tagline">Serv is the super for rental buildings too small to have one. Tenants text one number, Serv works out the repair, sends a vetted pro at a set price, and the owner approves in one tap.</p>
       <div class="cta-row">
         <a class="btn" href="#live-demo" onclick="window.posthog && posthog.capture('clicked_try_product')">See the Product →</a>
         <a class="btn btn-secondary" href="#prd">Read the Living PRD</a>
         <a class="btn btn-secondary" href="#build-log">Weekly Build Log</a>
       </div>
+      <p class="meta" style="margin:14px 0 0">This page uses PostHog to record visits: page views, clicks, and a replay of your session on this page. Nothing you type is recorded.</p>
     </header>
 
     <!-- DEMO / SCREENSHOT / VIDEO SHOWCASE -->
     <section id="live-demo">
       <h2>Product Showcase (Prototype / Live App / 2-Min Video)</h2>
       <p>
-        <strong>Current Status:</strong> Build 1: clickable local prototype (single HTML file, fake data)<br />
-        <strong>Demo:</strong> <a href="prototype.html">Clickable prototype</a> (fake data, no real payments). Cloud app URL in Build 5.<br /><img src="build1-prototype.png" alt="Serv prototype: verified pros near a Brooklyn ZIP with ratings and fixed prices" style="max-width:100%;border:1px solid #e3e7eb;border-radius:8px;margin-top:8px" />
+        <strong>Current Status:</strong> Build 2: one full user action runs on my laptop with a real AI call. A tenant reports a problem, an AI model reads it against the building&rsquo;s file and the set price list, and the owner gets one card to approve.<br />
+        <strong>Demo:</strong> runs locally (<code>npm start</code>, then <code>http://localhost:3000</code>; setup in <a href="https://github.com/building-with-ai-f26/dmr605-Serv/blob/main/AGENTS.md">AGENTS.md</a>). Cloud app URL in Build 5.
+      </p>
+      <p>
+        <strong>Earlier:</strong> the <a href="prototype.html">Build 1 clickable prototype</a> of the first idea, a marketplace where renters pick a pro (fake data).<br /><img src="build1-prototype.png" alt="Serv Build 1 prototype: verified pros near a Brooklyn ZIP with ratings and fixed prices" style="max-width:100%;border:1px solid #e3e7eb;border-radius:8px;margin-top:8px" />
       </p>
     </section>
 
@@ -167,22 +180,31 @@
       <h2>Living PRD (Product Requirements Document)</h2>
       <p class="meta">Updated every week as we test with real users and learn what works.</p>
 
+      <p class="meta"><strong>PRD v2 (Nov 15).</strong> The product changed this week. v1 was a marketplace where renters pick a pro. v2 is a managed service for small landlords. Why is in the Build 2 log below.</p>
+
       <h3>1. Target User & The Job to Be Done</h3>
-      <p><strong>Who is this for?</strong> Renters in Brooklyn and Manhattan who need small home repairs (a leaky faucet, a shelf mounted, furniture assembled) and whose landlord or super is slow to respond. I can reach them through classmates, neighbors, and my building.</p>
-      <p><strong>The painful "Before" workflow:</strong> They wait on the super, ask friends for a number, or scroll Craigslist, Nextdoor, and Google reviews. They can’t tell who is legitimate, prices are vague until the pro shows up, payment is cash or Venmo with no recourse, and it often takes days of texting to get someone booked.</p>
-      <p><strong>The "After" workflow with this product:</strong> In one sitting they enter a ZIP and the job, see a short list of ID-verified pros with ratings and an upfront price, pick a time, and book. Payment is held until they confirm the job is done, then they leave a rating.</p>
+      <p><strong>Who is this for?</strong> Owners of two- to four-family rental houses in one Queens neighborhood. These buildings are too small to have a super, so the owner is the super. The tenants are the second user: they are the ones who notice the leak. I reach owners through a 10-owner trial planned for Nov 16 to Dec 13.</p>
+      <p><strong>The painful "Before" workflow:</strong> A tenant texts the owner that something broke. The owner, often at work, becomes the dispatcher: guesses what the problem is from a blurry photo, calls around for someone free, learns the price only when the pro arrives, pays by cash or Zelle, and keeps no record. The next pro who walks in starts from zero and has to ask where the water shutoff is.</p>
+      <p><strong>The "After" workflow with this product:</strong> The tenant texts one Serv number. Serv reads the message and photo, matches it to a set price list, picks a vetted pro from its own small bench, and sends the owner one card: the job, the price, who is coming and when. The owner taps Approve. The job is added to the building&rsquo;s file, so the next visit is faster for whichever pro Serv sends.</p>
 
       <h3>2. Scope & Explicit Non-Goals</h3>
       <ul>
-        <li><strong>In Scope (Core Workflow):</strong> Customer finds a verified pro for one small repair job, books a time slot, pays into a hold, confirms completion, and rates the pro.</li>
-        <li><strong>Out of Scope #1:</strong> Native iOS/Android apps. Serv is a web app.</li>
-        <li><strong>Out of Scope #2:</strong> Real background checks and live payouts to pros. Verification and payments run in test mode only.</li>
-        <li><strong>Out of Scope #3:</strong> Anywhere outside Brooklyn and Manhattan, and large jobs (renovations, quotes, multi-day work).</li>
+        <li><strong>In Scope (Core Workflow):</strong> Tenant reports a problem &rarr; Serv triages it against the building file and the 20-line set price list &rarr; Serv proposes one pro at one price &rarr; owner approves, asks to pick the pro, or says not now &rarr; an approved job is written to the building file.</li>
+        <li><strong>Out of Scope #1:</strong> A real text line. A form in the app stands in for the phone number; during the trial the real number is answered by hand.</li>
+        <li><strong>Out of Scope #2:</strong> Payments and the monthly membership charge. Nothing is charged; the $30 a month is shown, not billed.</li>
+        <li><strong>Out of Scope #3:</strong> Owners browsing and choosing pros, pro scheduling, and anything off the price list (pests, appliances, renovations). Those go to a person.</li>
       </ul>
 
       <h3>3. How It Works Under the Hood & Riskiest Assumption (Week 2+)</h3>
-      <p><strong>Riskiest Assumption:</strong> [What is the #1 technical or user risk that could sink this product?]</p>
-      <p><strong>Simple Architecture:</strong> [User Input] → [Your App / Server] → [AI Model / Tool] → [Output]</p>
+      <p><strong>Riskiest Assumption:</strong> Owners will let Serv choose the pro and the price instead of choosing themselves. The whole business rests on it. In a marketplace, an owner who finds a good plumber texts that plumber directly next time and the platform loses every repeat job. If Serv does the choosing, the owner&rsquo;s relationship is with Serv and there is nobody to take off the platform. If owners insist on picking, Serv is a marketplace again with the same leak. The part of this risk that software can cause: one wrong read of a tenant&rsquo;s message (wrong job, wrong price, wrong trade) on the first try, and the owner stops trusting the card.</p>
+      <p><strong>How Build 2 tests it:</strong></p>
+      <ul>
+        <li><strong>The owner card has three answers</strong>: Approve, &ldquo;I would rather pick the pro&rdquo;, and Not now. Each tap is sent to PostHog as <code>owner_decision</code>. Pass mark for the trial, set before it starts: 6 of 10 owners approve a real job without asking to pick. Fewer than 3 means the managed model is out.</li>
+        <li><strong>The AI only reads; code decides.</strong> The model says which price list line the problem is and how sure it is. The price comes from the list in code, and the pro from a rule (nearest on the bench for that trade), so a made-up answer cannot change what the owner pays.</li>
+        <li><strong>When unsure, it asks.</strong> Under 60% confidence, or when the model has a question for the tenant, no price is offered and a person takes over. A gas smell or sparking wires is never priced: the tenant is told to leave and call 911.</li>
+        <li><strong>Not tested yet:</strong> how often the model picks the right line on real, messy tenant messages. That is Build 4 (10 cases: normal, messy, adversarial). 16 automated tests cover the checks around the model, not the model itself.</li>
+      </ul>
+      <p><strong>Simple Architecture:</strong> [Tenant&rsquo;s message + optional photo, in the browser] &rarr; [Local Node server, <code>app/server.mjs</code>] &rarr; [One AI call through OpenRouter to Claude, with the building file and price list in the prompt] &rarr; [JSON answer, checked in <code>app/triage.mjs</code>] &rarr; [Rules pick the price and the pro, <code>app/dispatch.mjs</code>] &rarr; [Owner card] &rarr; [Decision saved to a local JSON file; approved jobs join the building file]. The browser sends PostHog the page view, clicks, a session replay, and four events: <code>report_submitted</code>, <code>triage_completed</code>, <code>triage_failed</code>, <code>owner_decision</code>. The tenant&rsquo;s words are not sent to PostHog, and typed text is masked in replays.</p>
 
       <h3>4. Unit Economics & Analytics Snapshot (Updated Weekly)</h3>
       <div class="grid-2">
@@ -192,11 +214,13 @@
         </div>
         <div class="stat-box">
           <div class="stat-label">Est. Cost Per User Run</div>
-          <div class="stat-value">[Not yet estimated]</div>
+          <div class="stat-value">About $0.02 to $0.03</div>
+          <div class="meta">One AI call per tenant report: roughly 1,300 tokens in (2,900 with a photo) and 700 out on Claude Opus, at $4 and $20 per million tokens. An estimate; the app prints the measured cost of every call. Against a $145 job it is under 0.02%.</div>
         </div>
         <div class="stat-box">
           <div class="stat-label">User Evidence (Analytics from Build 2)</div>
-          <div class="stat-value">[Not yet measured]</div>
+          <div class="stat-value">PostHog installed</div>
+          <div class="meta">On this page and the local app. No outside users yet; the owner trial starts Nov 16.</div>
         </div>
         <div class="stat-box">
           <div class="stat-label">Sponsor Call (Week 6)</div>
@@ -223,9 +247,10 @@
       <div class="log-entry">
         <h3>Build 2 · Smallest Local Version & PostHog (Due Nov 16)</h3>
         <ul>
-          <li><strong>What shipped:</strong> Nov 10: upgraded the <a href="prototype.html">clickable prototype</a>: each pro has their own working hours, booked times can’t be double-booked, sorting (recommended, lowest price, top rated), a “My bookings” list, cancel before the pro accepts (hold released, no charge), and an English/Spanish toggle. Still fake data in the browser. Next: local working slice, PostHog, PRD v2, and setup in AGENTS.md.</li>
-          <li><strong>What broke / changed in PRD:</strong> [Fill in]</li>
-          <li><strong>Cost & time this week:</strong> $[0.00] · [0] hours</li>
+          <li><strong>What shipped:</strong> Nov 10: upgraded the <a href="prototype.html">clickable prototype</a> (working hours per pro, no double-booking, sorting, a bookings list, cancel before acceptance, English/Spanish). Nov 15: rebuilt the idea as a small local app in <code>app/</code>. One full action works: a tenant reports a problem with an optional photo, one real AI call (Claude through OpenRouter) matches it to a 20-line set price list using the building&rsquo;s file, the app proposes one pro at one price, the owner approves in one tap, and the job is added to the building file. Added PostHog to this page and the app, PRD v2, <code>AGENTS.md</code> with setup and structure, and 16 automated tests.</li>
+          <li><strong>Things learned with AI:</strong> (1) Let the model read and let code decide. The model only names a price list line; the price and the pro come from code, so a wrong answer can be caught by a check instead of reaching the owner. (2) An API key lives in <code>.env</code>, which Git ignores; <code>.env.example</code> is the committed copy with placeholders. The PostHog project key is the exception: it is public by design, because the browser has to see it. (3) PostHog silently drops events from automated test browsers. The test run showed no events until the debug log said why.</li>
+          <li><strong>What broke / changed in PRD:</strong> The biggest change so far. A strategy review on Nov 11 found the v1 marketplace had nothing that lasts: ID checks and held payment help on a first job between strangers, but the second job moves to a text and Zelle. PRD v2 drops &ldquo;renters pick a pro&rdquo; for &ldquo;Serv is the building&rsquo;s super&rdquo;: the user is now the small landlord, tenants text one number, and Serv chooses the pro at a set price. The area moved from Brooklyn and Manhattan to one Queens neighborhood. Also: the repo and page are named Serv, and the test command first pointed at a folder Node could not run, fixed by naming the test file.</li>
+          <li><strong>Cost & time this week:</strong> $0.00 new spend so far (Claude Pro already counted in Build 1; AI calls cost about 2 to 3 cents each) &middot; hours to be added</li>
         </ul>
       </div>
 

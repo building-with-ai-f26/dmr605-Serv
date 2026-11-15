@@ -1,6 +1,6 @@
 # Serv
 
-> **One-line pitch:** For NYC renters who need a small home repair done: find an ID-verified, rated local pro, book a time, and pay only when the job is done.
+> **One-line pitch:** The super for rental buildings too small to have one: tenants text one number, Serv works out the repair and sends a vetted pro at a set price, and the owner approves in one tap.
 
 - **Builder:** D (`@dav-ro-11`)
 - **Pod:** [Pod Name / Number]
@@ -35,11 +35,16 @@ Create your PostHog account in Week 1. Install it on the Product Page and local 
 
 ## Local setup
 
-Clone **your own repository** and ask your coding agent to document the exact install and run commands here and in `AGENTS.md`.
+The app needs Node.js 20 or newer and nothing else. Structure, rules and every command are in [`AGENTS.md`](./AGENTS.md).
 
 ```bash
-git clone https://github.com/building-with-ai-f26/<your-repo-name>.git
-cd <your-repo-name>
+git clone https://github.com/building-with-ai-f26/dmr605-Serv.git
+cd dmr605-Serv
+cp .env.example .env     # then paste your OpenRouter key and PostHog key into .env
+npm start                # open http://localhost:3000
+npm test                 # 16 checks, no key or network needed
 ```
 
-If your app needs API keys, use a local environment file such as `.env`. Keep private keys out of source code, browser code, screenshots, and commits. The template ignores `.env`; `.env.example` contains placeholders only.
+Type a tenant's message (or click an example), press **Send to Serv**, and the app makes one real AI call and shows the owner's approval card. Each call costs about 2 to 3 cents and its measured cost is printed under the card.
+
+Keep private keys out of source code, browser code, screenshots, and commits. The template ignores `.env`; `.env.example` contains placeholders only.
