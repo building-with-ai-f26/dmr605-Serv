@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Serv · Build 2 (local)</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="config.js"></script>
+  <script src="analytics.js"></script>
+</head>
+<body>
+  <header class="top">
+    <div>
+      <span class="logo">Serv</span>
+      <span class="sub">the super for buildings too small to have one</span>
+    </div>
+    <div class="top-right">
+      <span id="ai-status" class="pill"></span>
+      <button id="reset" class="link" type="button" data-ph="reset-demo">Reset demo</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="building" id="building"></section>
+
+    <div class="cols">
+      <!-- 1. The tenant texts the number on the fridge -->
+      <section class="card">
+        <h2><span class="step">1</span> Tenant texts Serv</h2>
+        <p class="hint">Stands in for the number on the fridge. In the sprint this is a real text line run by hand.</p>
+        <form id="report">
+          <label>Unit
+            <select id="unit" name="unit"></select>
+          </label>
+          <label>What is wrong?
+            <textarea id="message" name="message" rows="4" maxlength="2000" required placeholder="the kitchen sink keeps dripping even when its off, its been 3 days"></textarea>
+          </label>
+          <div class="examples" id="examples"></div>
+          <label class="file">Photo (optional)
+            <input id="photo" type="file" accept="image/*" />
+          </label>
+          <img id="preview" class="preview" alt="Photo to send" hidden />
+          <button id="send" class="primary" type="submit" data-ph="send-report">Send to Serv</button>
+        </form>
+        <p id="error" class="error" role="alert" hidden></p>
+      </section>
+
+      <!-- 2. Serv works out the job; the owner gets one tap -->
+      <section class="card" id="result-card">
+        <h2><span class="step">2</span> Serv sorts it out</h2>
+        <div id="result" class="empty">Send a message to see what Serv does with it.</div>
+      </section>
+    </div>
+
+    <div class="cols">
+      <section class="card">
+        <h2>Building file</h2>
+        <p class="hint">What any Serv pro should know before walking in. Approved jobs are added here.</p>
+        <ul id="file" class="file-list"></ul>
+      </section>
+      <section class="card">
+        <h2>Requests so far</h2>
+        <ul id="history" class="history"></ul>
+      </section>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
