@@ -19,7 +19,7 @@
 | `app/public/` | The page: `index.html`, `app.js`, `style.css`, and `analytics.js` (PostHog loader). |
 | `app/test/app.test.mjs` | Automated tests. They use a fake AI, so they need no key and no network. |
 | `app/data/db.json` | Created on first use. Ignored by Git. Delete it, or press "Reset demo", to start over. |
-| `docs/` | The public Product Page (GitHub Pages): PRD, build log, `config.js` (PostHog key for the page), and a copy of `analytics.js`. `prototype.html` is the Build 1 prototype of the earlier marketplace idea. |
+| `docs/` | The public Product Page (GitHub Pages): PRD and build log, with the PostHog web snippet in the `<head>` of `index.html`. `prototype.html` is the Build 1 prototype of the earlier marketplace idea. |
 | `.env.example` | Every setting the app reads, with placeholders. Copy to `.env`. |
 
 One user action, end to end: the browser posts the message (and a photo shrunk to 1280 px) to `POST /api/requests` → `triage.mjs` sends one request to OpenRouter → the JSON answer is checked → `dispatch.mjs` picks the price and pro → the request is saved and returned → the page shows the owner card → the owner's tap goes to `POST /api/requests/:id/decision` → an approved job is added to the building file.
@@ -30,7 +30,7 @@ One user action, end to end: the browser posts the message (and a photo shrunk t
 - **Run locally:** `npm start`, then open `http://localhost:3000`. Stop with Ctrl+C.
 - **Run deterministic tests:** `npm test`
 - **Run model evals:** none yet. Planned for Build 4 (10 tenant messages scored against the right price list line).
-- **Product Page:** edit `docs/index.html` and push to `main`; GitHub Pages republishes it. Its PostHog key goes in `docs/config.js`.
+- **Product Page:** edit `docs/index.html` and push to `main`; GitHub Pages republishes it. Its PostHog snippet and public project token are in the `<head>`.
 
 Settings read from `.env`: `OPENROUTER_API_KEY` (required), `OPENROUTER_MODEL` (optional; empty picks the newest Claude Opus that OpenRouter lists), `POSTHOG_KEY`, `POSTHOG_HOST`, `PORT`.
 
@@ -38,7 +38,7 @@ Settings read from `.env`: `OPENROUTER_API_KEY` (required), `OPENROUTER_MODEL` (
 1. **The model reads, code decides.** The AI may classify a problem and write the reply to the tenant. It never sets a price, picks a pro, or approves anything. Keep those in `pricelist.mjs` and `dispatch.mjs`.
 2. **Emergencies are never priced.** A `life_safety` triage must produce no offer. There is a test for this; keep it passing.
 3. **No tenant text in analytics.** PostHog events carry outcomes and numbers, not the message. Replays mask typed input.
-4. **Keep `app/public/analytics.js` and `docs/analytics.js` identical.**
+4. **Tell people they are recorded.** The page and the app both carry a line saying PostHog records visits. Keep it.
 5. **Demo data is made up.** Do not put a real person's name, address or phone number in `store.mjs` or the docs.
 6. **No new dependencies without asking.** The app runs with nothing installed; that is a feature.
 

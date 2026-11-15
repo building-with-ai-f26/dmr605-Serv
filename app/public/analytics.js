@@ -1,5 +1,5 @@
-// PostHog loader, shared by the product page (docs/) and the local app (app/public/).
-// Keep the two copies identical. The key comes from window.SERV_CONFIG (config.js).
+// PostHog loader for the local app. The key comes from .env through window.SERV_CONFIG (config.js).
+// The product page (docs/index.html) carries PostHog's own snippet in its <head> instead.
 // With a key set, PostHog records pageviews, clicks (autocapture) and session replay.
 // Session replay also has to be switched on once in PostHog: Settings > Replay > Record user sessions.
 (function (d, w) {
