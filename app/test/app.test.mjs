@@ -7,8 +7,8 @@ import fs from 'node:fs';
 import { PRICE_LIST, TRADES } from '../pricelist.mjs';
 import { checkTriage, parseModelJson, pickModel, costUsd, triage, TriageError, _clearModelCache } from '../triage.mjs';
 import { propose, decide } from '../dispatch.mjs';
-import { createApp, readConfig } from '../server.mjs';
-import { createStore } from '../store.mjs';
+import { createApp, readConfig, hostingProblems } from '../server.mjs';
+import { createStore, openRemoteStore, openStore } from '../store.mjs';
 
 const tmpFile = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'serv-')), 'db.json');
 const seedDb = () => createStore(tmpFile()).db;
@@ -228,4 +228,82 @@ test('server: works end to end with Claude Code as the provider', async (t) => {
   assert.equal(res.status, 201);
   assert.equal(made.request.proposal.kind, 'offer');
   assert.equal(made.state.provider, 'claude-code');
+});
+
+// ---- Hosting (row 1 of the trial plan) ----
+
+/** A fake Supabase REST table: one row, kept in memory. */
+function fakeSupabase(rows = [], calls = []) {
+  return async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    if (init.headers?.apikey !== 'service-key') return new Response('bad key', { status: 401 });
+    if (init.method === 'POST') {
+      rows[0] = JSON.parse(init.body);
+      return new Response(null, { status: 201 });
+    }
+    return new Response(JSON.stringify(rows.map((r) => ({ doc: r.doc }))));
+  };
+}
+const remote = { supabaseUrl: 'https://db.test', supabaseKey: 'service-key' };
+
+test('config: a laptop is not hosted and has no AI cap; a hosted app is capped at 200 a day', () => {
+  const local = readConfig({});
+  assert.equal(local.hosted, false);
+  assert.equal(local.aiDailyLimit, 0);
+  const online = readConfig({ HOST: '0.0.0.0' });
+  assert.equal(online.hosted, true);
+  assert.equal(online.aiDailyLimit, 200);
+  assert.equal(readConfig({ HOST: '0.0.0.0', AI_DAILY_CALL_LIMIT: '25' }).aiDailyLimit, 25);
+});
+
+test('hosting: refuses to start online on a personal subscription or without a database', () => {
+  assert.deepEqual(hostingProblems(readConfig({})), []);
+  assert.equal(hostingProblems(readConfig({ HOST: '0.0.0.0' })).length, 2);
+  assert.equal(hostingProblems(readConfig({ HOST: '0.0.0.0', AI_PROVIDER: 'openrouter' })).length, 2);
+  const ready = { HOST: '0.0.0.0', AI_PROVIDER: 'openrouter', OPENROUTER_API_KEY: 'sk-or-v1-x', SUPABASE_URL: 'https://db.test/', SUPABASE_SERVICE_KEY: 'k' };
+  assert.deepEqual(hostingProblems(readConfig(ready)), []);
+  assert.equal(readConfig(ready).supabaseUrl, 'https://db.test');
+});
+
+test('remote store: seeds an empty database, then reads back what was saved', async () => {
+  const rows = [];
+  const calls = [];
+  const store = await openRemoteStore(remote, fakeSupabase(rows, calls));
+  assert.equal(rows[0].id, 'main');
+  assert.equal(rows[0].doc.building.id, 'bldg-1');
+  assert.match(calls[0].url, /\/rest\/v1\/app_state\?id=eq\.main/);
+
+  store.db.requests.push({ id: 'r1' });
+  await store.save();
+  const again = await openStore({ ...remote, dataFile: tmpFile() }, fakeSupabase(rows));
+  assert.equal(again.db.requests[0].id, 'r1');
+});
+
+test('remote store: a wrong key gives a message a person can act on', async () => {
+  await assert.rejects(openRemoteStore({ ...remote, supabaseKey: 'wrong' }, fakeSupabase()), /SUPABASE_SERVICE_KEY/);
+});
+
+test('openStore: without database settings it uses the local file', async () => {
+  const store = await openStore({ supabaseUrl: '', supabaseKey: '', dataFile: tmpFile() });
+  assert.equal(store.db.building.id, 'bldg-1');
+});
+
+test('server: the daily cap stops AI calls, reset is off online, and the health check answers', async (t) => {
+  const calls = [];
+  const config = { ...readConfig({ HOST: '0.0.0.0', AI_PROVIDER: 'openrouter', OPENROUTER_API_KEY: 'sk-or-v1-test', AI_DAILY_CALL_LIMIT: '1', SERV_DATA_FILE: tmpFile() }) };
+  _clearModelCache();
+  const server = createApp(config, fakeOpenRouter(good, { calls }));
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const post = (p, body) => fetch(base + p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+  assert.deepEqual(await (await fetch(base + '/healthz')).json(), { ok: true });
+  assert.equal((await post('/api/requests', { unit: '2F', message: 'The kitchen faucet drips.' })).status, 201);
+  const second = await post('/api/requests', { unit: '2F', message: 'The kitchen faucet still drips.' });
+  assert.equal(second.status, 429);
+  assert.equal((await second.json()).code, 'daily_limit');
+  assert.equal(calls.filter((c) => c.url.endsWith('/chat/completions')).length, 1);
+  assert.equal((await post('/api/reset', {})).status, 403);
+  assert.equal((await (await fetch(base + '/api/state')).json()).hosted, true);
 });

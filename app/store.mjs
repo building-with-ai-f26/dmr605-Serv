@@ -33,6 +33,7 @@ function seed() {
   };
 }
 
+/** Local store: one JSON file on this computer. Used for `npm start` on a laptop and in tests. */
 export function createStore(filePath) {
   let db;
   try {
@@ -54,4 +55,62 @@ export function createStore(filePath) {
       save();
     },
   };
+}
+
+/**
+ * Hosted store: the same single document, kept in one row of a Postgres table at Supabase.
+ * A hosted app's own disk is wiped on every deploy, so a file would lose the trial's data.
+ * Talks to Supabase's REST interface with the built-in fetch, so there is still nothing to install.
+ * The table is created once by hand; the SQL is in DEPLOY.md.
+ */
+export async function openRemoteStore({ supabaseUrl, supabaseKey }, fetchImpl = fetch) {
+  const table = `${supabaseUrl}/rest/v1/app_state`;
+  const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' };
+
+  async function call(url, init) {
+    let res;
+    try {
+      res = await fetchImpl(url, { ...init, headers: { ...headers, ...init?.headers }, signal: AbortSignal.timeout(15_000) });
+    } catch {
+      throw new Error('Could not reach the database. Check SUPABASE_URL and the internet connection.');
+    }
+    if (!res.ok) {
+      const detail = (await res.text().catch(() => '')).slice(0, 200);
+      throw new Error(`The database answered ${res.status}. Check SUPABASE_SERVICE_KEY and that the app_state table exists (see DEPLOY.md). ${detail}`.trim());
+    }
+    return res;
+  }
+
+  const write = (doc) => call(table, { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ id: 'main', doc, updated_at: new Date().toISOString() }) });
+
+  const rows = await (await call(`${table}?id=eq.main&select=doc`)).json();
+  let db = rows[0]?.doc;
+  if (!db) {
+    db = seed();
+    await write(db);
+  }
+
+  // Writes go one after another, so an earlier save can never land on top of a later one.
+  let queue = Promise.resolve();
+  function save() {
+    const snapshot = JSON.parse(JSON.stringify(db));
+    queue = queue.catch(() => {}).then(() => write(snapshot));
+    return queue;
+  }
+  return {
+    get db() {
+      return db;
+    },
+    save,
+    async reset() {
+      db = seed();
+      await save();
+    },
+  };
+}
+
+/** Picks the store from the settings: Supabase when both values are set, else the local file. */
+export async function openStore(config, fetchImpl = fetch) {
+  if (config.supabaseUrl && config.supabaseKey) return openRemoteStore(config, fetchImpl);
+  return createStore(config.dataFile);
 }
