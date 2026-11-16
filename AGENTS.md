@@ -44,7 +44,8 @@ Settings read from `.env`: `AI_PROVIDER` (`claude-code` by default, or `openrout
 3. **No tenant text in analytics.** PostHog events carry outcomes and numbers, not the message. Replays mask typed input.
 4. **Tell people they are recorded.** The page and the app both carry a line saying PostHog records visits. Keep it.
 5. **Demo data is made up.** Do not put a real person's name, address or phone number in `store.mjs` or the docs.
-6. **No new dependencies without asking.** The app runs with nothing installed; that is a feature.
+6. **Keep the Claude Code call locked down.** `triage.mjs` starts `claude -p` with only the Read tool (no shell, no file edits), in an empty scratch folder, with this computer's own Claude Code settings, tools and commands switched off, and never with a flag that skips permission checks. Do not loosen this. Tenant messages are untrusted text, so assume one may try to give the model orders.
+7. **No new dependencies without asking.** The app runs with nothing installed; that is a feature.
 
 ## 5. Non-Negotiable Engineering Rules
 1. **Plan before coding:** Before touching multiple files, propose a brief plan and wait for approval.

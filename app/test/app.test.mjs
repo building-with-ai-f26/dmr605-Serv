@@ -198,7 +198,8 @@ test('claude code: prompt goes in on stdin, the photo is saved for it to read, a
   const out = await triage({ unit: '2F', message: 'sink drips', photoDataUrl: 'data:image/jpeg;base64,AAAA', building: db.building, file: db.file }, ccCfg, { runImpl: fakeClaude(good, { calls }) });
   const call = calls[0];
   assert.equal(call.command, 'claude');
-  assert.deepEqual(call.args, ['-p', '--output-format', 'json', '--system-prompt-file', 'system.txt', '--tools', 'Read']);
+  assert.deepEqual(call.args, ['-p', '--output-format', 'json', '--system-prompt-file', 'system.txt', '--tools', 'Read', '--strict-mcp-config', '--disable-slash-commands', '--setting-sources', 'project']);
+  assert.ok(!call.args.some((a) => /skip|bypass|dangerous/i.test(a)), 'never passes a flag that skips permission checks');
   assert.match(call.opts.input, /Main water shutoff/);
   assert.match(call.opts.input, /photo\.jpg/);
   assert.deepEqual(call.files.sort(), ['photo.jpg', 'system.txt']);
