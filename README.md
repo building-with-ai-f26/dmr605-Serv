@@ -35,16 +35,19 @@ Create your PostHog account in Week 1. Install it on the Product Page and local 
 
 ## Local setup
 
-The app needs Node.js 20 or newer and nothing else. Structure, rules and every command are in [`AGENTS.md`](./AGENTS.md).
+The app needs Node.js 20 or newer and Claude Code, signed in with a Claude subscription. Structure, rules and every command are in [`AGENTS.md`](./AGENTS.md).
 
 ```bash
 git clone https://github.com/building-with-ai-f26/dmr605-Serv.git
 cd dmr605-Serv
-cp .env.example .env     # then paste your OpenRouter key and PostHog key into .env
-npm start                # open http://localhost:3000
-npm test                 # 16 checks, no key or network needed
+npm install -g @anthropic-ai/claude-code   # once; then run `claude` and sign in
+cp .env.example .env                       # once; Windows: copy .env.example .env
+npm start                                  # open http://localhost:3000
+npm test                                   # 20 checks, no sign-in or network needed
 ```
 
-Type a tenant's message (or click an example), press **Send to Serv**, and the app makes one real AI call and shows the owner's approval card. Each call costs about 2 to 3 cents and its measured cost is printed under the card.
+On Windows PowerShell, use `npm.cmd` in place of `npm` if PowerShell refuses to run scripts.
+
+Type a tenant's message (or click an example), press **Send to Serv**, and the app makes one real AI call through Claude Code and shows the owner's approval card. The call takes about 10 seconds and is covered by the Claude subscription; the app prints what it would cost on the pay-per-call API (about 3 cents). To pay per call through OpenRouter instead, set `AI_PROVIDER=openrouter` and a key in `.env`.
 
 Keep private keys out of source code, browser code, screenshots, and commits. The template ignores `.env`; `.env.example` contains placeholders only.

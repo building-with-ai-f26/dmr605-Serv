@@ -19,7 +19,7 @@ Use this as a scratchpad if helpful. Publish PRD v2 and the Build 2 log on `docs
 - **Stack (Frontend / Backend / DB):** Plain HTML, CSS and JavaScript / Node.js built-in http server, no packages / one local JSON file
 - **Local run command:** `npm start`
 - **Local URL (Build 2):** http://localhost:3000
-- **Models used (via OpenRouter or provider):** Claude Opus through OpenRouter, one call per tenant report (`OPENROUTER_MODEL` in `.env` overrides)
+- **Models used (via OpenRouter or provider):** Claude Opus, one call per tenant report, through Claude Code headless mode (`claude -p`) on my Claude subscription. OpenRouter is a second option (`AI_PROVIDER=openrouter`)
 
 ## 3. Time & Money Budget
 *Estimate what it will cost to build and what it costs each time a user runs a job.*
@@ -27,7 +27,7 @@ Use this as a scratchpad if helpful. Publish PRD v2 and the Build 2 log on `docs
 | Item | Estimate | Notes |
 | :--- | :--- | :--- |
 | **Build budget (coding agent / OpenRouter)** | `$` | |
-| **Unit cost per user action (inference/API)** | `$0.02 to $0.03 / run` | Estimate: about 1,300 tokens in (2,900 with a photo), 700 out. The app prints the measured cost of each call. |
+| **Unit cost per user action (inference/API)** | `$0 billed; about $0.03 / run API-equivalent` | Measured on 5 real calls: $0.026 to $0.035 for text, $0.061 with a photo. Covered by the Claude subscription in the local demo; a deployed app would pay this per call. |
 | **Hosting cost (monthly)** | `$0 / mo` | Local through Week 4. GitHub Pages for the Product Page is free. |
 | **Your engineering time budget** | `hrs/wk` | |
 

@@ -36,7 +36,8 @@ function fakeOpenRouter(answer, { status = 200, calls = [] } = {}) {
     return new Response(JSON.stringify({ model: 'anthropic/claude-opus-5.5', choices: [{ message: { content } }], usage: { prompt_tokens: 1000, completion_tokens: 500 } }));
   };
 }
-const cfg = { apiKey: 'sk-or-v1-test', baseUrl: 'https://openrouter.test/api/v1', model: '' };
+const cfg = { provider: 'openrouter', apiKey: 'sk-or-v1-test', baseUrl: 'https://openrouter.test/api/v1', model: '' };
+const ccCfg = { provider: 'claude-code', claudeBin: 'claude', claudeModel: '' };
 
 test('price list: 20 lines, unique ids, known trades, whole-dollar prices', () => {
   assert.equal(PRICE_LIST.length, 20);
@@ -146,7 +147,7 @@ test('triage: no key and a bad key give messages a person can act on', async () 
 
 test('server: report, then owner approval, end to end', async (t) => {
   _clearModelCache();
-  const config = { ...readConfig({ OPENROUTER_API_KEY: 'sk-or-v1-test', SERV_DATA_FILE: tmpFile() }) };
+  const config = { ...readConfig({ AI_PROVIDER: 'openrouter', OPENROUTER_API_KEY: 'sk-or-v1-test', SERV_DATA_FILE: tmpFile() }) };
   const server = createApp(config, fakeOpenRouter(good));
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   t.after(() => server.close());
@@ -170,4 +171,61 @@ test('server: report, then owner approval, end to end', async (t) => {
 
 test('server: a placeholder key counts as no key', () => {
   assert.equal(readConfig({ OPENROUTER_API_KEY: 'sk-or-v1-replace-with-your-key' }).apiKey, '');
+});
+
+/** A fake `claude -p`: records how it was called and prints what Claude Code prints. */
+function fakeClaude(result, { calls = [], fail } = {}) {
+  return async (command, args, opts) => {
+    calls.push({ command, args, opts, files: fs.readdirSync(opts.cwd) });
+    if (fail) throw Object.assign(new Error('spawn claude ENOENT'), { code: 'ENOENT' });
+    return {
+      code: 0,
+      stderr: '',
+      stdout: JSON.stringify({ type: 'result', is_error: false, result: typeof result === 'string' ? result : JSON.stringify(result), total_cost_usd: 0.03, usage: { input_tokens: 5, cache_creation_input_tokens: 1500, output_tokens: 400 }, modelUsage: { 'claude-opus-5-5': {} } }),
+    };
+  };
+}
+
+test('config: Claude Code is the default provider; openrouter only when asked', () => {
+  assert.equal(readConfig({}).provider, 'claude-code');
+  assert.equal(readConfig({ OPENROUTER_API_KEY: 'sk-or-v1-x' }).provider, 'claude-code');
+  assert.equal(readConfig({ AI_PROVIDER: 'openrouter' }).provider, 'openrouter');
+});
+
+test('claude code: prompt goes in on stdin, the photo is saved for it to read, and cost comes back', async () => {
+  const calls = [];
+  const db = seedDb();
+  const out = await triage({ unit: '2F', message: 'sink drips', photoDataUrl: 'data:image/jpeg;base64,AAAA', building: db.building, file: db.file }, ccCfg, { runImpl: fakeClaude(good, { calls }) });
+  const call = calls[0];
+  assert.equal(call.command, 'claude');
+  assert.deepEqual(call.args, ['-p', '--output-format', 'json', '--system-prompt-file', 'system.txt', '--tools', 'Read']);
+  assert.match(call.opts.input, /Main water shutoff/);
+  assert.match(call.opts.input, /photo\.jpg/);
+  assert.deepEqual(call.files.sort(), ['photo.jpg', 'system.txt']);
+  assert.equal(fs.existsSync(call.opts.cwd), false, 'scratch folder is removed afterwards');
+  assert.equal(out.priceItemId, 'faucet-leak');
+  assert.equal(out.ai.provider, 'claude-code');
+  assert.equal(out.ai.costUsd, 0.03);
+  assert.equal(out.ai.model, 'claude-opus-5-5');
+});
+
+test('claude code: not installed, and not signed in, give messages a person can act on', async () => {
+  const db = seedDb();
+  const input = { unit: '2F', message: 'x', building: db.building, file: db.file };
+  await assert.rejects(triage(input, ccCfg, { runImpl: fakeClaude(good, { fail: true }) }), /Could not find Claude Code/);
+  const notSignedIn = async () => ({ code: 1, stderr: '', stdout: JSON.stringify({ is_error: true, result: 'Invalid API key · Please run /login' }) });
+  await assert.rejects(triage(input, ccCfg, { runImpl: notSignedIn }), /sign in with your Claude account/);
+});
+
+test('server: works end to end with Claude Code as the provider', async (t) => {
+  const config = readConfig({ SERV_DATA_FILE: tmpFile() });
+  const server = createApp(config, { runImpl: fakeClaude(good) });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const res = await fetch(base + '/api/requests', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ unit: '2F', message: 'the kitchen sink keeps dripping' }) });
+  const made = await res.json();
+  assert.equal(res.status, 201);
+  assert.equal(made.request.proposal.kind, 'offer');
+  assert.equal(made.state.provider, 'claude-code');
 });
