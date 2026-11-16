@@ -36,7 +36,7 @@ One user action, end to end: the browser posts the message (and a photo shrunk t
 
 Settings read from `.env`: `AI_PROVIDER` (`claude-code` by default, or `openrouter`), `CLAUDE_MODEL` (optional), `CLAUDE_BIN` (optional path to the `claude` program), `OPENROUTER_API_KEY` and `OPENROUTER_MODEL` (only for `openrouter`), `POSTHOG_KEY`, `POSTHOG_HOST`, `PORT`.
 
-**About cost:** with `claude-code` the call is covered by the Claude subscription, so nothing is billed per call. The app still shows what the same call would cost on the pay-per-call API (about 3 cents for text, 6 cents with a photo). This setup is for the local demo only: a deployed app must call a paid API, because a personal subscription cannot serve other users.
+**About cost:** with `claude-code` the call is covered by the Claude subscription, so nothing is billed per call. The app still shows what the same call would cost on the pay-per-call API (measured $0.02 to $0.035 for text, $0.06 with a photo). This setup is for the local demo only: a deployed app must call a paid API, because a personal subscription cannot serve other users.
 
 ## 4. Rules specific to this project
 1. **The model reads, code decides.** The AI may classify a problem and write the reply to the tenant. It never sets a price, picks a pro, or approves anything. Keep those in `pricelist.mjs` and `dispatch.mjs`.
