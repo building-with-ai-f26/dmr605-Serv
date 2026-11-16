@@ -5,14 +5,14 @@
 ## 1. Project Overview
 - **What this repo builds:** Serv, the super for rental buildings too small to have one. A tenant reports a repair, one AI call matches it to a set price list using the building's file, Serv proposes one vetted pro at one price, and the owner approves in one tap.
 - **Primary user & core workflow:** Owners of two- to four-family rental houses in Queens, and their tenants. See the living PRD in `docs/index.html`.
-- **Tech stack:** Node.js 20 or newer, with no packages to install. Plain HTML, CSS and JavaScript in the browser. Data in one local JSON file. One AI call per tenant report, through the OpenRouter API to Claude. PostHog for analytics.
+- **Tech stack:** Node.js 20 or newer, with no packages to install. Plain HTML, CSS and JavaScript in the browser. Data in one local JSON file. One AI call per tenant report, made by Claude Code in headless mode (`claude -p`) on this computer, using the builder's Claude subscription. OpenRouter is a second option. PostHog for analytics.
 
 ## 2. Structure
 
 | Path | What it is |
 | --- | --- |
 | `app/server.mjs` | The local web server. Serves the page, reads `.env`, and exposes four routes: `GET /api/state`, `POST /api/requests` (the tenant's report, which makes the AI call), `POST /api/requests/:id/decision` (the owner's tap), `POST /api/reset`. |
-| `app/triage.mjs` | The AI call. Builds the prompt from the tenant's message, the building file and the price list, calls OpenRouter, then checks the answer. Anything out of range becomes "no match". |
+| `app/triage.mjs` | The AI call. Builds the prompt from the tenant's message, the building file and the price list, calls the AI, then checks the answer. Two providers: `claude-code` (default; starts `claude -p` in an empty scratch folder and sends the prompt on stdin) and `openrouter` (HTTPS). Anything out of range becomes "no match". |
 | `app/dispatch.mjs` | Plain rules, no AI. Turns a checked triage into an offer (price from the list, nearest pro of that trade), a hand-off to a person, or an emergency. Records the owner's decision. |
 | `app/pricelist.mjs` | The 20 set-price repairs. Prices are set here by hand, never by the model. |
 | `app/store.mjs` | Demo data (one building, its file, four pros) and the JSON file store. |
@@ -22,17 +22,21 @@
 | `docs/` | The public Product Page (GitHub Pages): PRD and build log, with the PostHog web snippet in the `<head>` of `index.html`. `prototype.html` is the Build 1 prototype of the earlier marketplace idea. |
 | `.env.example` | Every setting the app reads, with placeholders. Copy to `.env`. |
 
-One user action, end to end: the browser posts the message (and a photo shrunk to 1280 px) to `POST /api/requests` → `triage.mjs` sends one request to OpenRouter → the JSON answer is checked → `dispatch.mjs` picks the price and pro → the request is saved and returned → the page shows the owner card → the owner's tap goes to `POST /api/requests/:id/decision` → an approved job is added to the building file.
+One user action, end to end: the browser posts the message (and a photo shrunk to 1280 px) to `POST /api/requests` → `triage.mjs` makes one AI call (Claude Code by default) → the JSON answer is checked → `dispatch.mjs` picks the price and pro → the request is saved and returned → the page shows the owner card → the owner's tap goes to `POST /api/requests/:id/decision` → an approved job is added to the building file.
 
 ## 3. Commands
-- **Install dependencies:** none. Check Node with `node --version` (20 or newer).
-- **Set up keys (once):** `cp .env.example .env`, then open `.env` and paste your OpenRouter key after `OPENROUTER_API_KEY=` and your PostHog project key (starts with `phc_`) after `POSTHOG_KEY=`.
+- **Install dependencies:** the app itself needs none. Check Node with `node --version` (20 or newer). The AI call needs Claude Code: `npm install -g @anthropic-ai/claude-code`, then run `claude` once and sign in with your Claude account.
+- **Set up settings (once):** `cp .env.example .env` (the PostHog key is already filled in; nothing else is required).
 - **Run locally:** `npm start`, then open `http://localhost:3000`. Stop with Ctrl+C.
-- **Run deterministic tests:** `npm test`
+- **Run deterministic tests:** `npm test` (20 tests; they use a fake AI, so no sign-in or network is needed)
 - **Run model evals:** none yet. Planned for Build 4 (10 tenant messages scored against the right price list line).
 - **Product Page:** edit `docs/index.html` and push to `main`; GitHub Pages republishes it. Its PostHog snippet and public project token are in the `<head>`.
 
-Settings read from `.env`: `OPENROUTER_API_KEY` (required), `OPENROUTER_MODEL` (optional; empty picks the newest Claude Opus that OpenRouter lists), `POSTHOG_KEY`, `POSTHOG_HOST`, `PORT`.
+**On Windows (PowerShell):** type `npm.cmd` instead of `npm` and `claude.cmd` instead of `claude` if PowerShell refuses to run scripts, and use `copy .env.example .env`.
+
+Settings read from `.env`: `AI_PROVIDER` (`claude-code` by default, or `openrouter`), `CLAUDE_MODEL` (optional), `CLAUDE_BIN` (optional path to the `claude` program), `OPENROUTER_API_KEY` and `OPENROUTER_MODEL` (only for `openrouter`), `POSTHOG_KEY`, `POSTHOG_HOST`, `PORT`.
+
+**About cost:** with `claude-code` the call is covered by the Claude subscription, so nothing is billed per call. The app still shows what the same call would cost on the pay-per-call API (about 3 cents for text, 6 cents with a photo). This setup is for the local demo only: a deployed app must call a paid API, because a personal subscription cannot serve other users.
 
 ## 4. Rules specific to this project
 1. **The model reads, code decides.** The AI may classify a problem and write the reply to the tenant. It never sets a price, picks a pro, or approves anything. Keep those in `pricelist.mjs` and `dispatch.mjs`.

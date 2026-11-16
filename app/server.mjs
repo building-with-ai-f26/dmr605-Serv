@@ -34,6 +34,10 @@ export function readConfig(env = process.env) {
   const key = env.OPENROUTER_API_KEY ?? '';
   return {
     port: Number(env.PORT) || 3000,
+    // Which AI makes the call: Claude Code on this computer (default), or OpenRouter.
+    provider: env.AI_PROVIDER === 'openrouter' ? 'openrouter' : 'claude-code',
+    claudeBin: env.CLAUDE_BIN || 'claude',
+    claudeModel: env.CLAUDE_MODEL || '',
     apiKey: key.includes('replace-with') ? '' : key,
     baseUrl: (env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/$/, ''),
     model: env.OPENROUTER_MODEL || '',
@@ -73,13 +77,14 @@ function readJson(req) {
   });
 }
 
-export function createApp(config, fetchImpl = fetch) {
+export function createApp(config, deps = {}) {
+  if (typeof deps === 'function') deps = { fetchImpl: deps };
   const store = createStore(config.dataFile);
   const publicDir = path.join(here, 'public');
 
   function state() {
     const { building, file, bench, requests } = store.db;
-    return { building, file, bench, priceList: PRICE_LIST, requests: [...requests].reverse(), aiReady: Boolean(config.apiKey) };
+    return { building, file, bench, priceList: PRICE_LIST, requests: [...requests].reverse(), provider: config.provider, aiReady: config.provider === 'claude-code' || Boolean(config.apiKey) };
   }
 
   async function handleApi(req, res, url) {
@@ -100,7 +105,7 @@ export function createApp(config, fetchImpl = fetch) {
       if (message.length < 3) return sendJson(res, 400, { error: 'Describe the problem in a few words.' });
       if (message.length > 2000) return sendJson(res, 400, { error: 'Keep the message under 2,000 characters.' });
 
-      const result = await triage({ unit, message, photoDataUrl: photo, building, file }, config, fetchImpl);
+      const result = await triage({ unit, message, photoDataUrl: photo, building, file }, config, deps);
       const { ai, ...checked } = result;
       const request = {
         id: crypto.randomUUID().slice(0, 8),
@@ -171,7 +176,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const config = readConfig();
   createApp(config).listen(config.port, '127.0.0.1', () => {
     console.log(`Serv is running at http://localhost:${config.port}`);
-    if (!config.apiKey) console.log('No OPENROUTER_API_KEY yet: copy .env.example to .env and paste your key, then restart.');
+    if (config.provider === 'claude-code') console.log('AI calls go through Claude Code on this computer (your Claude subscription). Run `claude` once to sign in if you have not.');
+    else if (!config.apiKey) console.log('AI_PROVIDER is openrouter but there is no OPENROUTER_API_KEY in .env.');
     if (!config.posthogKey) console.log('No POSTHOG_KEY yet: analytics are off until you add it to .env.');
   });
 }

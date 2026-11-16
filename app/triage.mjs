@@ -5,11 +5,15 @@
 // The AI only classifies and writes. Code decides the price (from the price list) and the pro
 // (from the bench), so a wrong or made-up answer from the model can never change what the owner pays.
 
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
 import { PRICE_LIST, TRADES, findPriceItem } from './pricelist.mjs';
 
 const URGENCIES = ['life_safety', 'urgent', 'routine'];
 
-// Tried in order against the models OpenRouter lists. Set OPENROUTER_MODEL in .env to override.
+// OpenRouter only: tried in order against the models it lists. Set OPENROUTER_MODEL in .env to override.
 const MODEL_PREFERENCE = [
   /^anthropic\/claude-opus-5\.5$/,
   /^anthropic\/claude-opus-5(\.\d+)?$/,
@@ -150,18 +154,15 @@ function explainHttpError(status, detail, model) {
   return `OpenRouter answered ${status}. ${detail}`.trim();
 }
 
-/**
- * Makes the real call. `config` comes from .env; `fetchImpl` is swapped for a fake in tests.
- * Returns the checked triage plus what the call cost and how long it took.
- */
-export async function triage({ unit, message, photoDataUrl, building, file }, config, fetchImpl = fetch) {
+/** Provider 1: OpenRouter. Needs OPENROUTER_API_KEY and paid credits. */
+async function callOpenRouter({ userText, photoDataUrl }, config, fetchImpl) {
   if (!config.apiKey) {
-    throw new TriageError('No OPENROUTER_API_KEY found. Copy .env.example to .env and paste your key.', 'no_key');
+    throw new TriageError('No OPENROUTER_API_KEY found. Paste your key into .env, or set AI_PROVIDER=claude-code.', 'no_key');
   }
   const models = await loadModels(config.baseUrl, fetchImpl);
   const model = pickModel(models, config.model);
 
-  const content = [{ type: 'text', text: buildUserText({ unit, message, building, file }) }];
+  const content = [{ type: 'text', text: userText }];
   if (photoDataUrl) content.push({ type: 'image_url', image_url: { url: photoDataUrl } });
 
   const started = Date.now();
@@ -204,19 +205,136 @@ export async function triage({ unit, message, photoDataUrl, building, file }, co
   const body = await res.json();
   if (body.error) throw new TriageError(explainHttpError(body.error.code ?? 500, body.error.message ?? '', model), 'upstream');
   const text = body.choices?.[0]?.message?.content;
-  if (typeof text !== 'string' || !text.trim()) throw new TriageError('The model sent back an empty answer.', 'bad_model_output');
-
-  const result = checkTriage(parseModelJson(text), file);
   return {
-    ...result,
+    text,
     ai: {
+      provider: 'openrouter',
       model: body.model ?? model,
       ms,
       inputTokens: body.usage?.prompt_tokens ?? null,
       outputTokens: body.usage?.completion_tokens ?? null,
       costUsd: costUsd(body.usage, models.find((m) => m.id === model)),
+      billing: 'Paid per call from OpenRouter credits.',
     },
   };
+}
+
+/** Runs a command, feeds it `input` on stdin, and collects what it prints. */
+function run(command, args, { input, cwd, shell, timeoutMs }) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { cwd, shell, windowsHide: true });
+    let stdout = '';
+    let stderr = '';
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' }));
+    }, timeoutMs);
+    child.stdout.on('data', (d) => (stdout += d));
+    child.stderr.on('data', (d) => (stderr += d));
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({ code, stdout, stderr });
+    });
+    child.stdin.on('error', () => {}); // the command may exit before reading everything
+    child.stdin.end(input);
+  });
+}
+
+const quote = (arg) => (/[\s"]/.test(arg) ? `"${arg.replace(/"/g, '\\"')}"` : arg);
+
+/**
+ * Provider 2 (the default): Claude Code on this computer, in headless mode (`claude -p`).
+ * It uses the Claude subscription you are signed in to, so there is no API key and no per-call bill.
+ * `runImpl` is swapped for a fake in tests.
+ */
+async function callClaudeCode({ userText, photoDataUrl }, config, runImpl = run) {
+  // A scratch folder: keeps this project's own files out of the model's view, and holds the photo.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'serv-triage-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'system.txt'), SYSTEM_PROMPT);
+    let prompt = userText;
+    if (photoDataUrl) {
+      const [, ext, b64] = photoDataUrl.match(/^data:image\/(jpeg|png|webp);base64,(.*)$/s) ?? [];
+      if (b64) {
+        const name = `photo.${ext === 'jpeg' ? 'jpg' : ext}`;
+        fs.writeFileSync(path.join(dir, name), Buffer.from(b64, 'base64'));
+        prompt += `\n\nThe tenant attached a photo. It is the file ${name} in the current folder. Read it before you answer.`;
+      }
+    }
+    const args = ['-p', '--output-format', 'json', '--system-prompt-file', 'system.txt'];
+    if (config.claudeModel) args.push('--model', config.claudeModel);
+    args.push('--tools', 'Read'); // the only tool it may use, and only to look at the photo
+
+    const started = Date.now();
+    let out;
+    try {
+      try {
+        out = await runImpl(config.claudeBin, args, { input: prompt, cwd: dir, shell: false, timeoutMs: 180_000 });
+      } catch (err) {
+        // On Windows an npm-installed Claude Code is claude.cmd, which only starts through the shell.
+        if (err.code !== 'ENOENT' || process.platform !== 'win32') throw err;
+        out = await runImpl(quote(config.claudeBin), args.map(quote), { input: prompt, cwd: dir, shell: true, timeoutMs: 180_000 });
+      }
+    } catch (err) {
+      if (err.code === 'ETIMEDOUT') throw new TriageError('Claude Code took longer than 3 minutes to answer.', 'network');
+      if (err.code === 'ENOENT') {
+        throw new TriageError('Could not find Claude Code on this computer. Install it, run `claude` once in a terminal to sign in, then restart the app. See AGENTS.md.', 'no_key');
+      }
+      throw new TriageError(`Could not start Claude Code: ${err.message}`, 'upstream');
+    }
+    const ms = Date.now() - started;
+
+    let body;
+    try {
+      body = JSON.parse(out.stdout.slice(out.stdout.indexOf('{')));
+    } catch {
+      const said = (out.stderr || out.stdout).trim().slice(0, 300);
+      if (/not recognized|not found/i.test(said)) {
+        throw new TriageError('Could not find Claude Code on this computer. Install it, run `claude` once in a terminal to sign in, then restart the app. See AGENTS.md.', 'no_key');
+      }
+      throw new TriageError(`Claude Code did not answer as expected. ${said}`, 'upstream');
+    }
+    if (body.is_error || typeof body.result !== 'string') {
+      const said = String(body.result ?? body.subtype ?? '').slice(0, 300);
+      const hint = /login|api key|auth/i.test(said) ? ' Run `claude` in a terminal, sign in with your Claude account, then try again.' : '';
+      throw new TriageError(`Claude Code reported a problem: ${said}${hint}`, 'upstream');
+    }
+    const u = body.usage ?? {};
+    return {
+      text: body.result,
+      ai: {
+        provider: 'claude-code',
+        model: Object.keys(body.modelUsage ?? {})[0] ?? config.claudeModel ?? 'Claude (subscription default)',
+        ms,
+        inputTokens: (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) || null,
+        outputTokens: u.output_tokens ?? null,
+        // What this call would have cost on the pay-per-call API. The subscription covers it.
+        costUsd: typeof body.total_cost_usd === 'number' ? body.total_cost_usd : null,
+        billing: 'Covered by the Claude subscription. The dollar figure is what the same call would cost on the API.',
+      },
+    };
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Makes the real call. `config` comes from .env; `deps` lets tests swap in fakes.
+ * Returns the checked triage plus what the call cost and how long it took.
+ */
+export async function triage({ unit, message, photoDataUrl, building, file }, config, deps = {}) {
+  if (typeof deps === 'function') deps = { fetchImpl: deps };
+  const userText = buildUserText({ unit, message, building, file });
+  const { text, ai } =
+    config.provider === 'openrouter'
+      ? await callOpenRouter({ userText, photoDataUrl }, config, deps.fetchImpl ?? fetch)
+      : await callClaudeCode({ userText, photoDataUrl }, config, deps.runImpl);
+  if (typeof text !== 'string' || !text.trim()) throw new TriageError('The model sent back an empty answer.', 'bad_model_output');
+  return { ...checkTriage(parseModelJson(text), file), ai };
 }
 
 // For tests only.

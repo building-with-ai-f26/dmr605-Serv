@@ -36,7 +36,8 @@ async function api(path, body) {
 }
 
 const money = (n) => `$${n}`;
-const cost = (n) => (n == null ? 'cost unknown' : n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(3)}`);
+const dollars = (n) => (n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(3)}`);
+const cost = (a) => (a.costUsd == null ? 'cost unknown' : a.provider === 'claude-code' ? `${dollars(a.costUsd)} API-equivalent, covered by the Claude subscription` : dollars(a.costUsd));
 const URGENCY = { life_safety: 'Emergency', urgent: 'Urgent', routine: 'Routine' };
 const DECISION = {
   approve: 'Owner approved. Serv sends the pro.',
@@ -54,7 +55,7 @@ function renderBuilding() {
     for (const u of b.units) $('unit').append(el('option', { value: u, text: u }));
     $('unit').value = b.units[b.units.length - 1];
   }
-  $('ai-status').textContent = state.aiReady ? 'AI connected' : 'No API key in .env';
+  $('ai-status').textContent = !state.aiReady ? 'No API key in .env' : state.provider === 'claude-code' ? 'AI: Claude Code' : 'AI: OpenRouter';
   $('ai-status').className = state.aiReady ? 'pill' : 'pill off';
 }
 
@@ -140,7 +141,7 @@ function renderResult() {
   parts.push(
     el('div', {
       class: 'ai-meta',
-      text: `AI call · ${a.model} · ${(a.ms / 1000).toFixed(1)}s · ${a.inputTokens ?? '?'} tokens in, ${a.outputTokens ?? '?'} out · ${cost(a.costUsd)} · match confidence ${Math.round(t.confidence * 100)}%`,
+      text: `AI call · ${a.provider === 'claude-code' ? 'Claude Code' : 'OpenRouter'} · ${a.model} · ${(a.ms / 1000).toFixed(1)}s · ${a.inputTokens ?? '?'} tokens in, ${a.outputTokens ?? '?'} out · ${cost(a)} · match confidence ${Math.round(t.confidence * 100)}%`,
     }),
   );
   $('result').className = '';
@@ -212,6 +213,7 @@ $('report').addEventListener('submit', async (event) => {
       ai_ms: r.ai.ms,
       ai_cost_usd: r.ai.costUsd,
       ai_model: r.ai.model,
+      ai_provider: r.ai.provider,
     });
     $('message').value = '';
     $('photo').value = '';
