@@ -14,16 +14,24 @@ const KIND = { shutoff: 'Shutoff', equipment: 'Equipment', fixture: 'Fixture', a
 const firstName = (full) => (full || '').split(' ')[0] || 'there';
 const waiting = (r) => r.proposal.kind === 'offer' && !r.decision;
 
-async function decide(request, choice) {
+async function decide(request, choice, button) {
   if (busy) return;
   busy = true;
   showError('');
+  // While the answer is on its way: every button on the card is off, and the tapped one says so.
+  const buttons = [...button.parentNode.querySelectorAll('button')];
+  const label = button.textContent;
+  buttons.forEach((b) => { b.disabled = true; });
+  button.textContent = 'Sending…';
   try {
     const data = await api(`/api/owner/${linkToken()}/requests/${request.id}/decision`, { decision: choice });
     state = data.state;
     track('owner_decision', { choice, price_item: request.proposal.item.id, price_usd: request.proposal.item.priceUsd });
     render();
+    announce(OUTCOME[choice]);
   } catch (err) {
+    buttons.forEach((b) => { b.disabled = false; });
+    button.textContent = label;
     showError(err.message);
   } finally {
     busy = false;
@@ -32,7 +40,10 @@ async function decide(request, choice) {
 
 function showError(text) {
   const box = $('error');
-  if (box) { box.textContent = text; box.hidden = !text; }
+  if (!box) return;
+  box.textContent = text;
+  box.hidden = !text;
+  if (text) box.scrollIntoView({ block: 'center' });
 }
 
 /** The one-tap card. */
@@ -64,10 +75,10 @@ function offerCard(r) {
   }
   const act = (label, choice, cls) => {
     const b = el('button', { class: `btn ${cls}`, type: 'button', text: label, 'data-ph': `owner-${choice}` });
-    b.addEventListener('click', () => decide(r, choice));
+    b.addEventListener('click', () => decide(r, choice, b));
     return b;
   };
-  card.append(el('div', { class: 'actions' }, [act(`Approve ${money(item.priceUsd)}`, 'approve', 'primary big'), act('I will pick the pro', 'pick_myself', ''), act('Not now', 'decline', '')]));
+  card.append(el('div', { class: 'actions', role: 'group', 'aria-label': 'Your answer' }, [act(`Approve ${money(item.priceUsd)}`, 'approve', 'primary big'), act('I will pick the pro', 'pick_myself', ''), act('Not now', 'decline', '')]));
   return card;
 }
 
@@ -92,6 +103,7 @@ function render() {
   const approved = handled.filter((r) => r.decision.choice === 'approve').length;
 
   $('bar').replaceChildren(header('Owner view'));
+  document.title = `${open.length ? `(${open.length}) ` : ''}Your building · Serv`;
 
   const parts = [
     el('div', { class: 'hero' }, [el('h1', { text: `Hi ${firstName(b.ownerName)}` }), el('p', { text: `${b.address} · ${b.kind}` })]),
@@ -101,17 +113,17 @@ function render() {
       el('div', { class: 'fact' }, [el('b', { text: money(b.membershipUsdPerMonth) }), el('span', { text: 'per month' })]),
     ]),
     el('p', { id: 'error', class: 'error', role: 'alert', hidden: true }),
-    el('p', { class: 'section-title' }, [document.createTextNode('Needs your OK'), open.length ? el('span', { class: 'count', text: String(open.length) }) : null]),
+    el('h2', { class: 'section-title' }, [document.createTextNode('Needs your OK'), open.length ? el('span', { class: 'count', text: String(open.length) }) : null]),
   ];
 
   if (open.length) parts.push(...open.map(offerCard));
   else parts.push(el('div', { class: 'card empty' }, [el('strong', { text: 'You are all caught up' }), document.createTextNode('When a tenant reports something, Serv sorts it out and brings it here for one tap.')]));
 
-  if (other.length) parts.push(el('p', { class: 'section-title', text: 'Serv is handling' }), ...other.map(otherCard));
+  if (other.length) parts.push(el('h2', { class: 'section-title', text: 'Serv is handling' }), ...other.map(otherCard));
 
   if (handled.length) {
     parts.push(
-      el('p', { class: 'section-title', text: 'Recently handled' }),
+      el('h2', { class: 'section-title', text: 'Recently handled' }),
       el('section', { class: 'card' }, [
         el('ul', { class: 'list' }, handled.map((r) =>
           el('li', {}, [

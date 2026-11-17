@@ -48,6 +48,13 @@ window.showBadLink = function showBadLink(message = 'This link is not working.')
   );
 };
 
+/** Says a status change out loud for screen readers. Only fixed app wording goes here, never a tenant's message. */
+window.announce = function announce(text) {
+  let live = $('live');
+  if (!live) document.body.append((live = el('p', { id: 'live', class: 'sr-only', role: 'status' })));
+  live.textContent = text;
+};
+
 window.header = function header(note) {
   return el('div', { class: 'bar-in' }, [
     el('span', { class: 'logo' }, [el('span', { class: 'logo-mark', text: 'S' }), document.createTextNode('Serv')]),
