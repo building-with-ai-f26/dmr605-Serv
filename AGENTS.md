@@ -37,7 +37,7 @@ One user action, end to end: the browser posts the message (and a photo shrunk t
 
 Settings read from `.env`: `AI_PROVIDER` (`claude-code` by default, or `openrouter`), `CLAUDE_MODEL` (optional), `CLAUDE_BIN` (optional path to the `claude` program), `OPENROUTER_API_KEY` and `OPENROUTER_MODEL` (only for `openrouter`), `POSTHOG_KEY`, `POSTHOG_HOST`, `PORT`. Online only: `HOST`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `AI_DAILY_CALL_LIMIT`.
 
-**About cost:** with `claude-code` the call is covered by the Claude subscription, so nothing is billed per call. The app still shows what the same call would cost on the pay-per-call API (about 3 cents for text, 6 cents with a photo). This setup is for the local demo only: a deployed app must call a paid API, because a personal subscription cannot serve other users.
+**About cost:** with `claude-code` the call is covered by the Claude subscription, so nothing is billed per call. The app still shows what the same call would cost on the pay-per-call API (measured $0.02 to $0.035 for text, $0.06 with a photo). This setup is for the local demo only: a deployed app must call a paid API, because a personal subscription cannot serve other users.
 
 ## 4. Rules specific to this project
 1. **The model reads, code decides.** The AI may classify a problem and write the reply to the tenant. It never sets a price, picks a pro, or approves anything. Keep those in `pricelist.mjs` and `dispatch.mjs`.
@@ -46,7 +46,8 @@ Settings read from `.env`: `AI_PROVIDER` (`claude-code` by default, or `openrout
 4. **Tell people they are recorded.** The page and the app both carry a line saying PostHog records visits. Keep it.
 5. **Demo data is made up.** Do not put a real person's name, address or phone number in `store.mjs` or the docs.
 6. **Private links are secrets.** A tenant never sees a price or the file; an owner sees only their building; links never go to analytics. Keep the tests for this passing.
-7. **No new dependencies without asking.** The app runs with nothing installed; that is a feature.
+7. **Keep the Claude Code call locked down.** `triage.mjs` starts `claude -p` with only the Read tool (no shell, no file edits), in an empty scratch folder, with this computer's own Claude Code settings, tools and commands switched off, and never with a flag that skips permission checks. Do not loosen this. Tenant messages are untrusted text, so assume one may try to give the model orders.
+8. **No new dependencies without asking.** The app runs with nothing installed; that is a feature.
 
 ## 5. Non-Negotiable Engineering Rules
 1. **Plan before coding:** Before touching multiple files, propose a brief plan and wait for approval.

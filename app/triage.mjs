@@ -267,7 +267,10 @@ async function callClaudeCode({ userText, photoDataUrl }, config, runImpl = run)
     }
     const args = ['-p', '--output-format', 'json', '--system-prompt-file', 'system.txt'];
     if (config.claudeModel) args.push('--model', config.claudeModel);
-    args.push('--tools', 'Read'); // the only tool it may use, and only to look at the photo
+    // Locked down: Read is the only tool (no shell, no file edits), and only inside the scratch folder.
+    // No permission-skipping flag is ever passed. The extra flags keep this machine's own Claude Code setup
+    // (extra tools, hooks and commands from your settings) out of the call.
+    args.push('--tools', 'Read', '--strict-mcp-config', '--disable-slash-commands', '--setting-sources', 'project');
 
     const started = Date.now();
     let out;
