@@ -1,7 +1,8 @@
-// PostHog loader for the local app. The key comes from .env through window.SERV_CONFIG (config.js).
+// PostHog loader for the owner and tenant pages. The key comes from .env through window.SERV_CONFIG (config.js).
 // The product page (docs/index.html) carries PostHog's own snippet in its <head> instead.
-// With a key set, PostHog records pageviews, clicks (autocapture) and session replay.
-// Session replay also has to be switched on once in PostHog: Settings > Replay > Record user sessions.
+// The staff page never loads this file: staff work is not analytics.
+// Private links are secrets, so every URL PostHog sees has the link replaced with "private".
+// Anything marked data-private in the page is hidden in session replays, and typed text is always hidden.
 (function (d, w) {
   var cfg = w.SERV_CONFIG || {};
   var ph = (w.posthog = w.posthog || []);
@@ -19,6 +20,19 @@
 
   if (!cfg.posthogKey) return; // no key yet: calls are queued and dropped, nothing is sent
 
+  var LINK = /\/(o|t)\/[A-Za-z0-9_-]{16,}/g;
+  // Walks an event and rewrites every string in it, including replay snapshots that hold the page address.
+  function scrub(value) {
+    if (typeof value === 'string') return value.replace(LINK, '/$1/private');
+    if (Array.isArray(value)) return value.map(scrub);
+    if (value && typeof value === 'object') {
+      var out = {};
+      Object.keys(value).forEach(function (k) { out[k] = scrub(value[k]); });
+      return out;
+    }
+    return value;
+  }
+
   var host = cfg.posthogHost || 'https://us.i.posthog.com';
   var options = {
     api_host: host,
@@ -26,8 +40,8 @@
     capture_pageview: true,
     autocapture: true,
     disable_session_recording: false,
-    // Replays hide what people type, so a tenant's message never leaves the laptop through analytics.
-    session_recording: { maskAllInputs: true },
+    before_send: scrub,
+    session_recording: { maskAllInputs: true, maskTextSelector: '[data-private]' },
   };
   ph._i.push([cfg.posthogKey, options, 'posthog']);
 

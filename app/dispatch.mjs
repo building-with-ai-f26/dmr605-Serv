@@ -26,13 +26,13 @@ export function propose(triage, bench) {
 export const DECISIONS = ['approve', 'pick_myself', 'decline'];
 
 /** Records the owner's answer. Approving adds the job to the building file. */
-export function decide(request, decision, db, now = new Date()) {
+export function decide(request, decision, building, now = new Date()) {
   if (request.proposal.kind !== 'offer') throw new Error('Nothing to decide on this request.');
   if (request.decision) throw new Error('This request already has a decision.');
   request.decision = { choice: decision, at: now.toISOString() };
   if (decision === 'approve') {
     const { item, pro } = request.proposal;
-    db.file.push({
+    building.file.push({
       id: `job-${request.id}`,
       kind: 'job',
       text: `${now.toISOString().slice(0, 10)}: ${item.label} in ${request.unit}. Sent ${pro.name} at $${item.priceUsd}. Tenant said: "${request.message.slice(0, 140)}"`,
