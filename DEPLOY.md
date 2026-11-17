@@ -5,8 +5,7 @@ a paid AI key (a personal Claude subscription cannot serve other people), a data
 wipes the app's own disk on every deploy), and a cap on spending. The app refuses to start
 online until the first two are set, and prints what is missing.
 
-**Do not share the address with owners until the private views are in (row 2 of the trial plan).**
-Until then the page has no sign-in: anyone with the address can read reports and tap Approve.
+Owners and tenants never sign in: each gets a private link (`/o/...` for an owner, `/t/...` for a unit). Staff open `/staff` with the `STAFF_PASSWORD` and make buildings and links there. A hosted app starts empty, with no demo data.
 
 ## 1. AI key (OpenRouter)
 
@@ -47,6 +46,7 @@ Set these in the host's environment settings:
 | `OPENROUTER_API_KEY` | the key from step 1 |
 | `SUPABASE_URL` | the project URL from step 2 |
 | `SUPABASE_SERVICE_KEY` | the secret key from step 2 |
+| `STAFF_PASSWORD` | 8 or more characters; required online |
 | `AI_DAILY_CALL_LIMIT` | optional; 200 a day if unset, about $6 at most |
 | `POSTHOG_KEY` | the same public key as in `.env.example` |
 

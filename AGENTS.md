@@ -11,12 +11,12 @@
 
 | Path | What it is |
 | --- | --- |
-| `app/server.mjs` | The local web server. Serves the page, reads `.env`, and exposes four routes: `GET /api/state`, `POST /api/requests` (the tenant's report, which makes the AI call), `POST /api/requests/:id/decision` (the owner's tap), `POST /api/reset`. |
+| `app/server.mjs` | The local web server. Serves the page, reads `.env`, and exposes three private areas, each opened by a link and checked on every call: `/api/tenant/<unit link>` (the tenant's report, which makes the AI call, and the status of their own reports), `/api/owner/<building link>` (the owner's cards and one-tap decision), and `/api/staff/*` (password cookie: add buildings, file notes, queue). Pages: `/t/<link>`, `/o/<link>`, `/staff`. There is no open route that lists data. |
 | `app/triage.mjs` | The AI call. Builds the prompt from the tenant's message, the building file and the price list, calls the AI, then checks the answer. Two providers: `claude-code` (default; starts `claude -p` in an empty scratch folder and sends the prompt on stdin) and `openrouter` (HTTPS). Anything out of range becomes "no match". |
 | `app/dispatch.mjs` | Plain rules, no AI. Turns a checked triage into an offer (price from the list, nearest pro of that trade), a hand-off to a person, or an emergency. Records the owner's decision. |
 | `app/pricelist.mjs` | The 20 set-price repairs. Prices are set here by hand, never by the model. |
-| `app/store.mjs` | Demo data (one building, its file, four pros) and the JSON file store. |
-| `app/public/` | The page: `index.html`, `app.js`, `style.css`, and `analytics.js` (PostHog loader). |
+| `app/store.mjs` | Buildings (each with an owner link, one link per unit, and a file), made-up demo data for laptops only, and the JSON file store. |
+| `app/public/` | The pages: `tenant`, `owner`, `staff` (each `.html` plus `.js`), a small `index.html`, shared `style.css` and `common.js`, and `analytics.js` (PostHog loader that strips private links from every URL). |
 | `app/test/app.test.mjs` | Automated tests. They use a fake AI, so they need no key and no network. |
 | `app/data/db.json` | Created on first use. Ignored by Git. Delete it, or press "Reset demo", to start over. |
 | `docs/` | The public Product Page (GitHub Pages): PRD and build log, with the PostHog web snippet in the `<head>` of `index.html`. `prototype.html` is the Build 1 prototype of the earlier marketplace idea. |
@@ -37,7 +37,7 @@ One user action, end to end: the browser posts the message (and a photo shrunk t
 
 Settings read from `.env`: `AI_PROVIDER` (`claude-code` by default, or `openrouter`), `CLAUDE_MODEL` (optional), `CLAUDE_BIN` (optional path to the `claude` program), `OPENROUTER_API_KEY` and `OPENROUTER_MODEL` (only for `openrouter`), `POSTHOG_KEY`, `POSTHOG_HOST`, `PORT`. Online only: `HOST`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `AI_DAILY_CALL_LIMIT`.
 
-**About cost:** with `claude-code` the call is covered by the Claude subscription, so nothing is billed per call. The app still shows what the same call would cost on the pay-per-call API (about 3 cents for text, 6 cents with a photo). This setup is for the local demo only: a deployed app must call a paid API, because a personal subscription cannot serve other users.
+**About cost:** with `claude-code` the call is covered by the Claude subscription, so nothing is billed per call. The app still shows what the same call would cost on the pay-per-call API (measured $0.02 to $0.035 for text, $0.06 with a photo). This setup is for the local demo only: a deployed app must call a paid API, because a personal subscription cannot serve other users.
 
 ## 4. Rules specific to this project
 1. **The model reads, code decides.** The AI may classify a problem and write the reply to the tenant. It never sets a price, picks a pro, or approves anything. Keep those in `pricelist.mjs` and `dispatch.mjs`.
@@ -45,7 +45,9 @@ Settings read from `.env`: `AI_PROVIDER` (`claude-code` by default, or `openrout
 3. **No tenant text in analytics.** PostHog events carry outcomes and numbers, not the message. Replays mask typed input.
 4. **Tell people they are recorded.** The page and the app both carry a line saying PostHog records visits. Keep it.
 5. **Demo data is made up.** Do not put a real person's name, address or phone number in `store.mjs` or the docs.
-6. **No new dependencies without asking.** The app runs with nothing installed; that is a feature.
+6. **Private links are secrets.** A tenant never sees a price or the file; an owner sees only their building; links never go to analytics. Keep the tests for this passing.
+7. **Keep the Claude Code call locked down.** `triage.mjs` starts `claude -p` with only the Read tool (no shell, no file edits), in an empty scratch folder, with this computer's own Claude Code settings, tools and commands switched off, and never with a flag that skips permission checks. Do not loosen this. Tenant messages are untrusted text, so assume one may try to give the model orders.
+8. **No new dependencies without asking.** The app runs with nothing installed; that is a feature.
 
 ## 5. Non-Negotiable Engineering Rules
 1. **Plan before coding:** Before touching multiple files, propose a brief plan and wait for approval.

@@ -42,7 +42,7 @@ git clone https://github.com/building-with-ai-f26/dmr605-Serv.git
 cd dmr605-Serv
 npm install -g @anthropic-ai/claude-code   # once; then run `claude` and sign in
 cp .env.example .env                       # once; Windows: copy .env.example .env
-npm start                                  # open http://localhost:3000
+npm start                                  # open http://localhost:3000 for demo links; staff page at /staff
 npm test                                   # 26 checks, no sign-in or network needed
 ```
 
