@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import { PRICE_LIST, TRADES } from '../pricelist.mjs';
-import { checkTriage, parseModelJson, pickModel, costUsd, triage, TriageError, _clearModelCache } from '../triage.mjs';
+import { buildUserText, checkTriage, parseModelJson, pickModel, costUsd, triage, TriageError, _clearModelCache } from '../triage.mjs';
+import { FALLBACK_REPLY, guardReply, withoutPrices } from '../replycheck.mjs';
 import { propose, decide } from '../dispatch.mjs';
 import { createApp, readConfig, hostingProblems, staffCookie, staffCookieValid } from '../server.mjs';
 import { createStore, openRemoteStore, openStore, migrate, addBuilding, addFileNote, findOwner, findTenant } from '../store.mjs';
@@ -441,10 +442,102 @@ test('server: online, reset is off, the health check answers, and private links 
   assert.equal((await s.send('/api/demo-links')).status, 404, 'a hosted app never lists private links');
 });
 
-test('server: the daily AI cap stops reports for every unit once used up', async (t) => {
+test('server: past the daily AI cap a report is still saved and goes to a person, without an AI call', async (t) => {
   const s = await start(t, { AI_DAILY_CALL_LIMIT: '1' });
   assert.equal((await s.send(s.tenant('2F') + '/requests', { message: 'the kitchen faucet drips' })).status, 201);
-  const second = await s.send(s.tenant('1F') + '/requests', { message: 'the kitchen faucet drips too' });
-  assert.equal(second.status, 429);
-  assert.equal((await second.json()).code, 'daily_limit');
+  const second = await s.send(s.tenant('1F') + '/requests', { message: 'there is no heat in the apartment' });
+  assert.equal(second.status, 201);
+  assert.equal((await second.json()).request.status.code, 'person');
+  const saved = s.store.db.requests.at(-1);
+  assert.equal(saved.proposal.kind, 'needs_person');
+  assert.equal(saved.triage.urgency, 'urgent');
+  assert.equal(saved.ai, null);
+  assert.equal(s.store.db.aiCalls.count, 1);
+});
+
+test('server: when the AI call fails the report is kept for a person, and the tenant sees no operator text', async (t) => {
+  const s = await start(t, {}, { runImpl: fakeClaude(good, { fail: true }) });
+  const res = await s.send(s.tenant('2F') + '/requests', { message: 'the toilet is overflowing' });
+  assert.equal(res.status, 201);
+  const body = await res.json();
+  assert.equal(body.request.status.code, 'person');
+  assert.doesNotMatch(JSON.stringify(body), /Claude Code|OpenRouter|\.env|terminal/);
+  assert.equal(s.store.db.requests.at(-1).ai.failed, 'no_key');
+});
+
+test('server: thirty reports sent at once from one unit cannot slip under the daily limit', async (t) => {
+  const s = await start(t);
+  const all = await Promise.all(Array.from({ length: 30 }, () => s.send(s.tenant('2F') + '/requests', { message: 'the kitchen faucet drips' })));
+  assert.equal(all.filter((r) => r.status === 201).length, 5);
+  assert.equal(all.filter((r) => r.status === 429).length, 25);
+});
+
+test('server: a request line that is not a URL, a junk cookie and a non-object body get a 4xx, not a crash', async (t) => {
+  const s = await start(t, { STAFF_PASSWORD: 'correct horse' });
+  const net = await import('node:net');
+  const raw = await new Promise((resolve) => {
+    const c = net.connect(Number(new URL(s.base).port), '127.0.0.1', () => c.write('GET // HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n'));
+    let out = '';
+    c.on('data', (d) => (out += d));
+    c.on('end', () => resolve(out));
+  });
+  assert.match(raw, /^HTTP\/1\.1 400/);
+  assert.equal((await s.send('/api/staff/state', undefined, { cookie: 'serv_staff=%' })).status, 401);
+  assert.equal((await s.send('/api/staff/state', undefined, { cookie: 'serv_staff=1.\u00e9' })).status, 401);
+  assert.equal((await s.send(s.tenant('2F') + '/requests', null)).status, 400);
+  assert.equal((await s.send('/healthz')).status, 200, 'still up');
+});
+
+test('server: a photo over the size limit gets a clear 413', async (t) => {
+  const s = await start(t);
+  const res = await s.send(s.tenant('2F') + '/requests', { message: 'the kitchen faucet drips', photo: 'data:image/jpeg;base64,' + 'A'.repeat(5 * 1024 * 1024) });
+  assert.equal(res.status, 413);
+  assert.match((await res.json()).error, /too large/);
+});
+
+test('server: pages and answers carry nosniff, and private pages refuse to be framed', async (t) => {
+  const s = await start(t);
+  const page = await fetch(s.base + '/t/' + s.building.units[0].token);
+  assert.equal(page.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(page.headers.get('x-frame-options'), 'DENY');
+  assert.equal((await fetch(s.base + '/healthz')).headers.get('x-content-type-options'), 'nosniff');
+});
+
+test('staff sign-in: wrong passwords from a stranger do not lock out the right one', async (t) => {
+  const s = await start(t, { STAFF_PASSWORD: 'correct horse' });
+  for (let i = 0; i < 10; i++) assert.equal((await s.send('/api/staff/login', { password: 'guess' + i })).status, 401);
+  assert.equal((await s.send('/api/staff/login', { password: 'guess' })).status, 429, 'the guesser is slowed');
+  assert.equal((await s.send('/api/staff/login', { password: 'correct horse' })).status, 200, 'the right password still works');
+});
+
+test('reply: a price or a stretch of the building file never reaches the tenant', async () => {
+  const file = [{ id: 'f5', kind: 'access', text: 'The 2F tenant works nights. Knock after 2 pm. The owner keeps a spare key for both units.' }];
+  assert.equal(guardReply('The last repair cost $145.', file), FALLBACK_REPLY);
+  assert.equal(guardReply('Your neighbor: the 2F tenant works nights. Knock after 2 pm.', file), FALLBACK_REPLY);
+  assert.equal(guardReply('', file), FALLBACK_REPLY);
+  assert.equal(guardReply('Thanks, we are on it.', file), 'Thanks, we are on it.');
+  const job = [{ id: 'job-1', kind: 'job', text: '2026-11-01: Fix a faucet in 2F. Sent Pat R. at $145. Tenant said: "drip"' }];
+  const text = buildUserText({ unit: '1F', message: 'drip', building: forTriage(seedBuilding()), file: withoutPrices(job) });
+  assert.doesNotMatch(text, /\$145/);
+  assert.match(text, /Sent Pat R\.+ Tenant said/);
+});
+
+test('server: a reply that names a price is replaced before the tenant sees it', async (t) => {
+  const s = await start(t, {}, { runImpl: fakeClaude({ ...good, tenant_reply: 'That repair will cost $145.' }) });
+  const body = await (await s.send(s.tenant('2F') + '/requests', { message: 'the kitchen faucet drips' })).json();
+  assert.equal(body.request.reply, FALLBACK_REPLY);
+});
+
+test('tenant status text promises no alert or follow-up that is not sent', async (t) => {
+  const s = await start(t, {}, { runImpl: fakeClaude({ ...good, urgency: 'life_safety', price_item_id: null }) });
+  const body = await (await s.send(s.tenant('2F') + '/requests', { message: 'I smell gas' })).json();
+  assert.doesNotMatch(JSON.stringify(body.request.status), /alerted|same day|check back/i);
+});
+
+test('analytics: private links in /api/owner and /api/tenant addresses are scrubbed, timestamps are kept', async () => {
+  const src = fs.readFileSync(new URL('../public/analytics.js', import.meta.url), 'utf8');
+  const LINK = new RegExp(src.match(/var LINK = \/(.*)\/g;/)[1], 'g');
+  const token = 'AbCdEfGhIjKlMnOpQrSt12';
+  for (const p of ['o', 't', 'owner', 'tenant']) assert.equal(`https://x.app/api/${p}/${token}/state`.replace(LINK, '/$1/private'), `https://x.app/api/${p}/private/state`);
+  assert.match(src, /instanceof Date\) return value/);
 });

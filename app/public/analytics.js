@@ -20,10 +20,12 @@
 
   if (!cfg.posthogKey) return; // no key yet: calls are queued and dropped, nothing is sent
 
-  var LINK = /\/(o|t)\/[A-Za-z0-9_-]{16,}/g;
+  // Private links appear in page addresses (/o/…, /t/…) and in the pages' own API calls (/api/owner/…, /api/tenant/…).
+  var LINK = /\/(o|t|owner|tenant)\/[A-Za-z0-9_-]{16,}/g;
   // Walks an event and rewrites every string in it, including replay snapshots that hold the page address.
   function scrub(value) {
     if (typeof value === 'string') return value.replace(LINK, '/$1/private');
+    if (value instanceof Date) return value; // the event's own timestamp
     if (Array.isArray(value)) return value.map(scrub);
     if (value && typeof value === 'object') {
       var out = {};
@@ -41,6 +43,7 @@
     autocapture: true,
     disable_session_recording: false,
     before_send: scrub,
+    capture_performance: false, // no record of network calls, whose addresses carry the private link
     session_recording: { maskAllInputs: true, maskTextSelector: '[data-private]' },
   };
   ph._i.push([cfg.posthogKey, options, 'posthog']);

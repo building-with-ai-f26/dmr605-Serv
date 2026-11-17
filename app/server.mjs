@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { PRICE_LIST } from './pricelist.mjs';
 import { createStore, openStore, addBuilding, addFileNote, findOwner, findTenant } from './store.mjs';
 import { triage, TriageError } from './triage.mjs';
+import { FALLBACK_REPLY, guardReply, withoutPrices } from './replycheck.mjs';
 import { propose, decide, DECISIONS } from './dispatch.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -64,7 +65,7 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 const MAX_BODY = 4 * 1024 * 1024; // room for one phone photo, downsized in the browser
 
 function sendJson(res, status, body) {
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
   res.end(JSON.stringify(body));
 }
 
@@ -75,13 +76,16 @@ function readJson(req) {
     req.on('data', (c) => {
       size += c.length;
       if (size > MAX_BODY) {
-        reject(Object.assign(new Error('That photo is too large.'), { status: 413 }));
-        req.destroy();
+        // Keep reading (and dropping) the rest so the answer can be sent; destroying the socket here hid the message.
+        if (size - c.length <= MAX_BODY) reject(Object.assign(new Error('That photo is too large.'), { status: 413 }));
       } else chunks.push(c);
     });
     req.on('end', () => {
       try {
-        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'));
+        if (size > MAX_BODY) return;
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+        if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('not an object');
+        resolve(body);
       } catch {
         reject(Object.assign(new Error('Request body was not JSON.'), { status: 400 }));
       }
@@ -95,7 +99,10 @@ function readJson(req) {
 const STAFF_COOKIE = 'serv_staff';
 const STAFF_DAYS = 14;
 const sign = (secret, value) => crypto.createHmac('sha256', `serv-staff:${secret}`).update(value).digest('base64url');
-const same = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+function same(a, b) {
+  const [x, y] = [Buffer.from(String(a)), Buffer.from(String(b))];
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
+}
 
 export function staffCookie(secret, now = Date.now()) {
   const exp = String(now + STAFF_DAYS * 86_400_000);
@@ -110,7 +117,12 @@ export function staffCookieValid(secret, value, now = Date.now()) {
 
 function cookieOf(req, name) {
   const found = (req.headers.cookie ?? '').split(';').map((c) => c.trim().split('=')).find(([k]) => k === name);
-  return found ? decodeURIComponent(found.slice(1).join('=')) : '';
+  if (!found) return '';
+  try {
+    return decodeURIComponent(found.slice(1).join('='));
+  } catch {
+    return ''; // a malformed cookie is no cookie
+  }
 }
 
 const TOKEN = /^[A-Za-z0-9_-]{16,40}$/;
@@ -121,12 +133,12 @@ const TOKEN = /^[A-Za-z0-9_-]{16,40}$/;
 function tenantRequest(r) {
   let status;
   const d = r.decision;
-  if (r.proposal.kind === 'emergency') status = { code: 'emergency', label: 'Emergency', detail: 'Call 911 now. Serv has alerted your building owner.' };
+  if (r.proposal.kind === 'emergency') status = { code: 'emergency', label: 'Emergency', detail: 'Call 911 now. Then call your building owner.' };
   else if (r.proposal.kind === 'needs_person') status = { code: 'person', label: 'Serv is on it', detail: 'A person at Serv is reading your report and will follow up.' };
-  else if (!d) status = { code: 'waiting', label: 'Waiting for your owner', detail: 'Serv sent your owner a one-tap request. Most are answered the same day.' };
+  else if (!d) status = { code: 'waiting', label: 'Waiting for your owner', detail: 'Serv has asked your owner to approve the repair. This page updates when they answer.' };
   else if (d.choice === 'approve') status = { code: 'approved', label: 'Approved', detail: `${r.proposal.pro.name} is coming: ${r.proposal.pro.nextOpening}.` };
   else if (d.choice === 'pick_myself') status = { code: 'owner', label: 'Your owner is arranging it', detail: 'Your building owner will pick the person who comes.' };
-  else status = { code: 'later', label: 'On hold', detail: 'Your owner is not scheduling this right now. Serv will check back.' };
+  else status = { code: 'later', label: 'On hold', detail: 'Your owner is not scheduling this right now.' };
   return { id: r.id, at: r.at, message: r.message, hasPhoto: r.hasPhoto, reply: r.triage.tenantReply, urgency: r.triage.urgency, status };
 }
 
@@ -174,6 +186,11 @@ export function createApp(config, deps = {}) {
     };
   }
 
+  // Reports started per unit link today, kept in memory (see report()). A restart forgets it; the saved count still holds.
+  const unitTries = new Map();
+  /** The triage for a report the AI never read: no match, treated as urgent, a person reads it. */
+  const unreadTriage = (why) => ({ summary: `Not read by the AI (${why}). Read the tenant's message.`, urgency: 'urgent', trade: null, priceItemId: null, confidence: 0, questions: [], fileEntryIds: [], tenantReply: FALLBACK_REPLY });
+
   // The one user action: a tenant reports a problem and Serv works out what to do.
   async function report(found, body) {
     const { building, unit } = found;
@@ -182,21 +199,35 @@ export function createApp(config, deps = {}) {
     if (message.length < 3) return [400, { error: 'Describe the problem in a few words.' }];
     if (message.length > 2000) return [400, { error: 'Keep the message under 2,000 characters.' }];
 
-    // Stops one phone, or one prankster holding a link, from running up the AI bill.
+    // Stops one phone, or one prankster holding a link, from running up the AI bill. Counted here, before the AI
+    // call starts, so thirty requests sent at once cannot all slip under the limit.
     const today = new Date().toISOString().slice(0, 10);
-    const todays = store.db.requests.filter((r) => r.buildingId === building.id && r.unit === unit.name && r.at.slice(0, 10) === today).length;
-    if (reportsPerUnitPerDay > 0 && todays >= reportsPerUnitPerDay) {
+    const saved = store.db.requests.filter((r) => r.buildingId === building.id && r.unit === unit.name && r.at.slice(0, 10) === today).length;
+    const started = unitTries.get(unit.token)?.day === today ? unitTries.get(unit.token).count : 0;
+    if (reportsPerUnitPerDay > 0 && Math.max(saved, started) >= reportsPerUnitPerDay) {
       return [429, { error: 'You have sent several reports today. Serv is working on them. For anything urgent, call your building owner.', code: 'unit_limit' }];
     }
-    // The spend cap: stop making AI calls once today's allowance is used up.
-    const used = store.db.aiCalls?.day === today ? store.db.aiCalls.count : 0;
-    if (config.aiDailyLimit > 0 && used >= config.aiDailyLimit) {
-      return [429, { error: 'Serv has reached its limit of reports for today. Please call your building owner, or try again tomorrow.', code: 'daily_limit' }];
-    }
-    store.db.aiCalls = { day: today, count: used + 1 };
+    unitTries.set(unit.token, { day: today, count: Math.max(saved, started) + 1 });
 
-    const result = await triage({ unit: unit.name, message, photoDataUrl: photo, building: triageBuilding(building), file: building.file }, config, deps);
-    const { ai, ...checked } = result;
+    // A report is never thrown away. If the AI cannot be asked (the day's allowance is used up) or fails,
+    // the report is still saved and goes to a person at Serv, and the tenant gets a plain acknowledgement.
+    const used = store.db.aiCalls?.day === today ? store.db.aiCalls.count : 0;
+    let checked;
+    let ai = null;
+    if (config.aiDailyLimit > 0 && used >= config.aiDailyLimit) {
+      checked = unreadTriage('the daily AI limit was reached');
+    } else {
+      store.db.aiCalls = { day: today, count: used + 1 };
+      try {
+        ({ ai, ...checked } = await triage({ unit: unit.name, message, photoDataUrl: photo, building: triageBuilding(building), file: withoutPrices(building.file) }, config, deps));
+        checked.tenantReply = guardReply(checked.tenantReply, building.file);
+      } catch (err) {
+        if (!(err instanceof TriageError)) throw err;
+        console.error(`AI call failed (${err.code}): ${err.message}`); // for staff, never for the tenant
+        checked = unreadTriage('the AI call failed');
+        ai = { failed: err.code, error: err.message };
+      }
+    }
     const request = {
       id: crypto.randomUUID().slice(0, 8),
       buildingId: building.id,
@@ -256,11 +287,17 @@ export function createApp(config, deps = {}) {
       if (req.method === 'POST' && sub === 'login') {
         const body = await readJson(req);
         const now = Date.now();
-        loginTries = loginTries.filter((t) => now - t < 15 * 60_000);
-        if (loginTries.length >= 10) return sendJson(res, 429, { error: 'Too many tries. Wait a few minutes.' });
-        loginTries.push(now);
+        // Only wrong passwords count, per caller, so a stranger sending junk cannot lock staff out of sign-in.
+        // A much higher ceiling across all callers still slows a guesser who rotates addresses.
+        const who = clientOf(req);
+        loginTries = loginTries.filter((t) => now - t.at < 15 * 60_000);
         const given = typeof body.password === 'string' ? body.password : '';
-        if (config.staffPassword && !same(sign('check', given), sign('check', config.staffPassword))) return sendJson(res, 401, { error: 'That password is not right.' });
+        const right = !config.staffPassword || same(sign('check', given), sign('check', config.staffPassword));
+        if (!right) {
+          if (loginTries.filter((t) => t.who === who).length >= 10 || loginTries.length >= 300) return sendJson(res, 429, { error: 'Too many tries. Wait a few minutes.' });
+          loginTries.push({ at: now, who });
+          return sendJson(res, 401, { error: 'That password is not right.' });
+        }
         res.setHeader('Set-Cookie', `${STAFF_COOKIE}=${encodeURIComponent(config.staffPassword ? staffCookie(config.staffPassword) : 'open')}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${STAFF_DAYS * 86400}${config.hosted ? '; Secure' : ''}`);
         return sendJson(res, 200, { ok: true });
       }
@@ -311,12 +348,21 @@ export function createApp(config, deps = {}) {
   }
 
   let loginTries = [];
+  // Behind a host's proxy the caller's address is the first entry of X-Forwarded-For; on a laptop it is the socket's.
+  const clientOf = (req) => (config.hosted && String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim()) || req.socket.remoteAddress || 'unknown';
 
   const PAGES = { o: 'owner.html', t: 'tenant.html', staff: 'staff.html' };
-  const PRIVATE_HEADERS = { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Robots-Tag': 'noindex, nofollow' };
+  const PRIVATE_HEADERS = { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Robots-Tag': 'noindex, nofollow', 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY' };
 
   return http.createServer(async (req, res) => {
-    const url = new URL(req.url, 'http://localhost');
+    let url;
+    try {
+      url = new URL(req.url, 'http://localhost');
+    } catch {
+      // A request line that is not a URL (for example "//") must get an answer, not take the server down.
+      res.writeHead(400, { 'Content-Type': 'text/plain', 'X-Content-Type-Options': 'nosniff' });
+      return res.end('Bad request');
+    }
     try {
       // The host pings this to see that the app is up.
       if (url.pathname === '/healthz') return sendJson(res, 200, { ok: true });
@@ -343,10 +389,11 @@ export function createApp(config, deps = {}) {
       res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] ?? 'application/octet-stream', ...PRIVATE_HEADERS });
       fs.createReadStream(file).pipe(res);
     } catch (err) {
+      if (res.headersSent) return res.end();
       if (err instanceof TriageError) return sendJson(res, err.code === 'no_key' ? 503 : 502, { error: err.message, code: err.code });
       if (err.status) return sendJson(res, err.status, { error: err.message });
       console.error(err);
-      sendJson(res, 500, { error: 'Something went wrong on the server. See the terminal.' });
+      sendJson(res, 500, { error: 'Something went wrong on our side. Please try again in a minute.' });
     }
   });
 }
@@ -371,6 +418,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     console.error('Serv cannot start as a hosted app yet:\n' + problems.map((p) => `  - ${p}`).join('\n') + '\nSee DEPLOY.md.');
     process.exit(1);
   }
+  // A backstop: one failed promise somewhere must not take the whole app (and everyone's open requests) down.
+  process.on('unhandledRejection', (err) => console.error('Unhandled error:', err));
   const store = await openStore(config);
   createApp(config, { store }).listen(config.port, config.host, () => {
     console.log(config.hosted ? `Serv is running on port ${config.port}` : `Serv is running at http://localhost:${config.port}`);
