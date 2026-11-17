@@ -141,7 +141,7 @@ export function createStore(filePath, { demo = true } = {}) {
  * Talks to Supabase's REST interface with the built-in fetch, so there is still nothing to install.
  * The table is created once by hand; the SQL is in DEPLOY.md.
  */
-export async function openRemoteStore({ supabaseUrl, supabaseKey }, fetchImpl = fetch, { demo = true } = {}) {
+export async function openRemoteStore({ supabaseUrl, supabaseKey }, fetchImpl = fetch, { demo = true, retryWaitMs } = {}) {
   const table = `${supabaseUrl}/rest/v1/app_state`;
   const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' };
 
@@ -159,7 +159,20 @@ export async function openRemoteStore({ supabaseUrl, supabaseKey }, fetchImpl = 
     return res;
   }
 
-  const write = (doc) => call(table, { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ id: 'main', doc, updated_at: new Date().toISOString() }) });
+  // A save that fails is tried twice more before giving up: a short blip at the database must not leave the
+  // running app holding a change the database never got.
+  async function write(doc, { tries = 3, waitMs = 400 } = {}) {
+    const body = JSON.stringify({ id: 'main', doc, updated_at: new Date().toISOString() });
+    waitMs = retryWaitMs ?? waitMs;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await call(table, { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body });
+      } catch (err) {
+        if (attempt >= tries) throw err;
+        await new Promise((r) => setTimeout(r, waitMs * attempt));
+      }
+    }
+  }
 
   const rows = await (await call(`${table}?id=eq.main&select=doc`)).json();
   let db = rows[0]?.doc && migrate(rows[0].doc);
@@ -169,10 +182,29 @@ export async function openRemoteStore({ supabaseUrl, supabaseKey }, fetchImpl = 
   }
 
   // Writes go one after another, so an earlier save can never land on top of a later one.
+  // If a save fails for good and no later save is waiting, the app goes back to what the database last took,
+  // so the pages never show a change that would vanish on the next restart.
   let queue = Promise.resolve();
+  let lastGood = JSON.stringify(db);
+  let waiting = 0;
   function save() {
-    const snapshot = JSON.parse(JSON.stringify(db));
-    queue = queue.catch(() => {}).then(() => write(snapshot));
+    const snapshot = JSON.stringify(db);
+    waiting++;
+    queue = queue
+      .catch(() => {})
+      .then(() => write(JSON.parse(snapshot)))
+      .then(
+        () => {
+          lastGood = snapshot;
+        },
+        (err) => {
+          if (waiting === 1) db = JSON.parse(lastGood);
+          throw err;
+        },
+      )
+      .finally(() => {
+        waiting--;
+      });
     return queue;
   }
   return {

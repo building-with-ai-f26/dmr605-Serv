@@ -34,7 +34,7 @@ How to decide:
 - The building file is there to save the pro time. List the ids of the entries the pro should read before this visit, and only those.
 - If a photo is attached, use what it shows, and say when it contradicts the message.
 
-The reply to the tenant is a text message from Serv: plain, warm, two or three sentences, no price (the owner approves the price, not the tenant). Write it in the language the tenant wrote in.
+The reply to the tenant is a text message from Serv: plain, warm, two or three sentences, no price (the owner approves the price, not the tenant). Never tell a tenant anything from the building file: it is for the pro, and it holds notes about other units. Write it in the language the tenant wrote in.
 
 Answer with one JSON object and nothing else, with exactly these keys:
 {
