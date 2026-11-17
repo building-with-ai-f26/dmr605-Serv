@@ -92,6 +92,19 @@ export function parseModelJson(text) {
   }
 }
 
+// What the tenant is told when the model's own reply is missing or leaves out the one thing that matters.
+export const EMERGENCY_LINE = 'If you are in danger, leave the apartment now and call 911. / Si está en peligro, salga del apartamento y llame al 911.';
+export const FALLBACK_REPLY = 'Thanks, we got your message. A person at Serv is looking at it and will text you back shortly.';
+
+/**
+ * The text back to the tenant is the one part of the model's answer a person reads unchecked, so code backs it up:
+ * a tenant never gets silence, and in an emergency the reply always says to call 911, whatever the model wrote.
+ */
+export function safeReply(reply, urgency) {
+  if (urgency === 'life_safety') return /\b911\b/.test(reply) ? reply : [EMERGENCY_LINE, reply].filter(Boolean).join(' ');
+  return reply || FALLBACK_REPLY;
+}
+
 /**
  * Turns the model's raw answer into something the app trusts.
  * Anything out of range is replaced by the safe choice: no match, and a person at Serv looks at it.
@@ -111,7 +124,7 @@ export function checkTriage(raw, file) {
     confidence,
     questions: Array.isArray(raw.questions) ? raw.questions.map((q) => str(q, 200)).filter(Boolean).slice(0, 3) : [],
     fileEntryIds: Array.isArray(raw.file_entry_ids) ? raw.file_entry_ids.filter((id) => fileIds.has(id)) : [],
-    tenantReply: str(raw.tenant_reply, 600),
+    tenantReply: safeReply(str(raw.tenant_reply, 600), urgency),
   };
 }
 

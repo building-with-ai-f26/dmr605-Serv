@@ -1,7 +1,7 @@
 // Run with `npm test`. Checks that text from outside Serv cannot pose as part of the prompt.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { asData, buildUserText } from '../triage.mjs';
+import { asData, buildUserText, checkTriage, EMERGENCY_LINE, FALLBACK_REPLY } from '../triage.mjs';
 
 const building = { kind: 'Two-family house', address: '37-12 84th Street, Jackson Heights, Queens', units: ['1F', '2F'] };
 const file = [{ id: 'f1', kind: 'shutoff', text: 'Main water shutoff: basement, behind the boiler.' }];
@@ -39,4 +39,27 @@ test('prompt: an ordinary message and the building file read exactly as before',
   const text = buildUserText({ unit: '2F', message: 'The kitchen faucet drips all night.', building, file });
   assert.match(text, /<tenant_message unit="2F">\nThe kitchen faucet drips all night\.\n<\/tenant_message>/);
   assert.match(text, /- f1 \[shutoff\]: Main water shutoff: basement, behind the boiler\./);
+});
+
+// ---- The reply to the tenant ----
+
+const answer = (over) => ({ summary: 'x', urgency: 'routine', trade: 'plumbing', price_item_id: 'faucet-leak', confidence: 0.9, questions: [], file_entry_ids: [], tenant_reply: 'Thanks, we are on it.', ...over });
+
+test('reply: an emergency always tells the tenant to call 911, even when the model forgot', () => {
+  const forgot = checkTriage(answer({ urgency: 'life_safety', tenant_reply: 'We will send someone to look at the gas smell.' }), []);
+  assert.ok(forgot.tenantReply.startsWith(EMERGENCY_LINE));
+  assert.match(forgot.tenantReply, /We will send someone/, 'the model\'s own words are kept after the warning');
+  assert.equal(checkTriage(answer({ urgency: 'life_safety', tenant_reply: '' }), []).tenantReply, EMERGENCY_LINE);
+});
+
+test('reply: a reply that already says 911 is left exactly as written', () => {
+  const said = 'Salga del apartamento ahora y llame al 911. Serv ya avisó al dueño.';
+  assert.equal(checkTriage(answer({ urgency: 'life_safety', tenant_reply: said }), []).tenantReply, said);
+});
+
+test('reply: a missing reply becomes a plain acknowledgement, and a normal reply is untouched', () => {
+  assert.equal(checkTriage(answer({ tenant_reply: '   ' }), []).tenantReply, FALLBACK_REPLY);
+  assert.equal(checkTriage(answer({ tenant_reply: 42 }), []).tenantReply, FALLBACK_REPLY);
+  assert.equal(checkTriage(answer({}), []).tenantReply, 'Thanks, we are on it.');
+  assert.doesNotMatch(checkTriage(answer({}), []).tenantReply, /911/, 'no emergency wording on a routine repair');
 });
