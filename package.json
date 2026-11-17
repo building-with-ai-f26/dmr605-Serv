@@ -5,7 +5,7 @@
   "description": "Serv Build 2: a tenant reports a repair, a real AI call triages it against the building file, the owner approves a set price in one tap.",
   "scripts": {
     "start": "node app/server.mjs",
-    "test": "node --test app/test/app.test.mjs app/test/store-rollback.test.mjs"
+    "test": "node --test app/test/app.test.mjs app/test/triage-safety.test.mjs app/test/store-rollback.test.mjs"
   },
   "engines": { "node": ">=20" }
 }

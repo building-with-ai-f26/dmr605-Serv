@@ -1,6 +1,7 @@
 // Checks on the text a tenant reads. Kept apart from the AI call so they hold whatever the model wrote.
 
-export const FALLBACK_REPLY = 'Thanks, we got your message. A person at Serv is looking at it and will text you back shortly.';
+import { FALLBACK_REPLY } from './triage.mjs';
+export { FALLBACK_REPLY };
 
 /** True when the reply names a dollar amount or repeats a stretch of a building file entry word for word. */
 export function leaks(reply, file = []) {
