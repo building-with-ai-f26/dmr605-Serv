@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="noindex, nofollow" />
-  <meta name="theme-color" content="#1f5c4a" />
+  <meta name="theme-color" content="#ffffff" />
   <title>Serv · the super for small buildings</title>
   <link rel="stylesheet" href="/style.css" />
   <script src="/config.js"></script>
@@ -17,7 +17,7 @@
       <p>Tenants report a repair. Serv sorts it out, sends a vetted pro at a set price, and the owner approves in one tap.</p>
     </div>
     <div class="card">
-      <h3>Have a link from Serv?</h3>
+      <h2 style="font-size:18px">Have a link from Serv?</h2>
       <p class="hint" style="margin-top:4px">Owners and tenants each get a private link. Open it on your phone. There is nothing to sign up for or install. If yours stopped working, ask the person who sent it.</p>
     </div>
     <div id="demo"></div>
@@ -29,7 +29,7 @@
     if (!window.SERV_CONFIG.hosted) {
       api('/api/demo-links').then(({ buildings }) => {
         $('demo').replaceChildren(
-          el('p', { class: 'section-title', text: 'Try it on this computer' }),
+          el('h2', { class: 'section-title', text: 'Try it on this computer' }),
           ...buildings.map((b) =>
             el('div', { class: 'card', style: 'margin-top:12px' }, [
               el('h3', { text: b.address, style: 'margin-bottom:10px' }),
