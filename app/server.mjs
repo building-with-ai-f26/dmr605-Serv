@@ -7,7 +7,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { PRICE_LIST } from './pricelist.mjs';
-import { createStore } from './store.mjs';
+import { createStore, openStore } from './store.mjs';
 import { triage, TriageError } from './triage.mjs';
 import { propose, decide, DECISIONS } from './dispatch.mjs';
 
@@ -32,6 +32,8 @@ export function loadEnv(file) {
 
 export function readConfig(env = process.env) {
   const key = env.OPENROUTER_API_KEY ?? '';
+  const host = env.HOST || '127.0.0.1';
+  const hosted = !['127.0.0.1', 'localhost', '::1'].includes(host);
   return {
     port: Number(env.PORT) || 3000,
     // Which AI makes the call: Claude Code on this computer (default), or OpenRouter.
@@ -44,6 +46,13 @@ export function readConfig(env = process.env) {
     posthogKey: env.POSTHOG_KEY || '',
     posthogHost: env.POSTHOG_HOST || 'https://us.i.posthog.com',
     dataFile: env.SERV_DATA_FILE || path.join(here, 'data', 'db.json'),
+    // Hosting. On a laptop none of these are set and the app answers only on this computer.
+    host,
+    hosted,
+    supabaseUrl: (env.SUPABASE_URL || '').replace(/\/$/, ''),
+    supabaseKey: env.SUPABASE_SERVICE_KEY || '',
+    // The most AI calls allowed in one day (UTC). 0 means no limit. A hosted app gets 200 unless told otherwise.
+    aiDailyLimit: env.AI_DAILY_CALL_LIMIT !== undefined && env.AI_DAILY_CALL_LIMIT !== '' ? Math.max(0, Number(env.AI_DAILY_CALL_LIMIT) || 0) : hosted ? 200 : 0,
   };
 }
 
@@ -79,19 +88,21 @@ function readJson(req) {
 
 export function createApp(config, deps = {}) {
   if (typeof deps === 'function') deps = { fetchImpl: deps };
-  const store = createStore(config.dataFile);
+  const store = deps.store ?? createStore(config.dataFile);
   const publicDir = path.join(here, 'public');
 
   function state() {
     const { building, file, bench, requests } = store.db;
-    return { building, file, bench, priceList: PRICE_LIST, requests: [...requests].reverse(), provider: config.provider, aiReady: config.provider === 'claude-code' || Boolean(config.apiKey) };
+    return { building, file, bench, priceList: PRICE_LIST, requests: [...requests].reverse(), hosted: config.hosted, provider: config.provider, aiReady: config.provider === 'claude-code' || Boolean(config.apiKey) };
   }
 
   async function handleApi(req, res, url) {
     if (req.method === 'GET' && url.pathname === '/api/state') return sendJson(res, 200, state());
 
     if (req.method === 'POST' && url.pathname === '/api/reset') {
-      store.reset();
+      // Online, this button would let any visitor wipe the trial's data.
+      if (config.hosted) return sendJson(res, 403, { error: 'Reset is turned off on the hosted app.' });
+      await store.reset();
       return sendJson(res, 200, state());
     }
 
@@ -104,6 +115,14 @@ export function createApp(config, deps = {}) {
       const photo = typeof body.photoDataUrl === 'string' && /^data:image\/(jpeg|png|webp);base64,/.test(body.photoDataUrl) ? body.photoDataUrl : null;
       if (message.length < 3) return sendJson(res, 400, { error: 'Describe the problem in a few words.' });
       if (message.length > 2000) return sendJson(res, 400, { error: 'Keep the message under 2,000 characters.' });
+
+      // The spend cap: stop making AI calls once today's allowance is used up.
+      const today = new Date().toISOString().slice(0, 10);
+      const used = store.db.aiCalls?.day === today ? store.db.aiCalls.count : 0;
+      if (config.aiDailyLimit > 0 && used >= config.aiDailyLimit) {
+        return sendJson(res, 429, { error: 'Serv has reached its limit of reports for today. Please call your building owner, or try again tomorrow.', code: 'daily_limit' });
+      }
+      store.db.aiCalls = { day: today, count: used + 1 };
 
       const result = await triage({ unit, message, photoDataUrl: photo, building, file }, config, deps);
       const { ai, ...checked } = result;
@@ -119,7 +138,7 @@ export function createApp(config, deps = {}) {
         decision: null,
       };
       store.db.requests.push(request);
-      store.save();
+      await store.save();
       return sendJson(res, 201, { request, state: state() });
     }
 
@@ -135,7 +154,7 @@ export function createApp(config, deps = {}) {
       } catch (err) {
         return sendJson(res, 409, { error: err.message });
       }
-      store.save();
+      await store.save();
       return sendJson(res, 200, { request, state: state() });
     }
 
@@ -145,6 +164,8 @@ export function createApp(config, deps = {}) {
   return http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
     try {
+      // The host pings this to see that the app is up.
+      if (url.pathname === '/healthz') return sendJson(res, 200, { ok: true });
       if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
 
       // The PostHog project key is public by design, but it still comes from .env so it stays out of Git.
@@ -170,12 +191,29 @@ export function createApp(config, deps = {}) {
   });
 }
 
+/** Stops a hosted app from starting in a state that cannot work or would lose data. Returns the problems found. */
+export function hostingProblems(config) {
+  if (!config.hosted) return [];
+  const problems = [];
+  if (config.provider !== 'openrouter') problems.push('Set AI_PROVIDER=openrouter. Claude Code on a personal subscription cannot serve other people.');
+  else if (!config.apiKey) problems.push('Set OPENROUTER_API_KEY.');
+  if (!config.supabaseUrl || !config.supabaseKey) problems.push('Set SUPABASE_URL and SUPABASE_SERVICE_KEY. Without a database, every deploy wipes the data.');
+  return problems;
+}
+
 // Start only when run directly (`node app/server.mjs`), not when a test imports this file.
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   loadEnv(path.join(root, '.env'));
   const config = readConfig();
-  createApp(config).listen(config.port, '127.0.0.1', () => {
-    console.log(`Serv is running at http://localhost:${config.port}`);
+  const problems = hostingProblems(config);
+  if (problems.length) {
+    console.error('Serv cannot start as a hosted app yet:\n' + problems.map((p) => `  - ${p}`).join('\n') + '\nSee DEPLOY.md.');
+    process.exit(1);
+  }
+  const store = await openStore(config);
+  createApp(config, { store }).listen(config.port, config.host, () => {
+    console.log(config.hosted ? `Serv is running on port ${config.port}` : `Serv is running at http://localhost:${config.port}`);
+    if (config.aiDailyLimit) console.log(`AI calls are capped at ${config.aiDailyLimit} a day.`);
     if (config.provider === 'claude-code') console.log('AI calls go through Claude Code on this computer (your Claude subscription). Run `claude` once to sign in if you have not.');
     else if (!config.apiKey) console.log('AI_PROVIDER is openrouter but there is no OPENROUTER_API_KEY in .env.');
     if (!config.posthogKey) console.log('No POSTHOG_KEY yet: analytics are off until you add it to .env.');

@@ -20,6 +20,7 @@
 | `app/test/app.test.mjs` | Automated tests. They use a fake AI, so they need no key and no network. |
 | `app/data/db.json` | Created on first use. Ignored by Git. Delete it, or press "Reset demo", to start over. |
 | `docs/` | The public Product Page (GitHub Pages): PRD and build log, with the PostHog web snippet in the `<head>` of `index.html`. `prototype.html` is the Build 1 prototype of the earlier marketplace idea. |
+| `Dockerfile`, `DEPLOY.md` | How to put the app online: a paid AI key, a Supabase table for the data, and a daily cap on AI calls. Online, `app/store.mjs` keeps the same single document in Supabase instead of `db.json`. |
 | `.env.example` | Every setting the app reads, with placeholders. Copy to `.env`. |
 
 One user action, end to end: the browser posts the message (and a photo shrunk to 1280 px) to `POST /api/requests` → `triage.mjs` makes one AI call (Claude Code by default) → the JSON answer is checked → `dispatch.mjs` picks the price and pro → the request is saved and returned → the page shows the owner card → the owner's tap goes to `POST /api/requests/:id/decision` → an approved job is added to the building file.
@@ -28,13 +29,13 @@ One user action, end to end: the browser posts the message (and a photo shrunk t
 - **Install dependencies:** the app itself needs none. Check Node with `node --version` (20 or newer). The AI call needs Claude Code: `npm install -g @anthropic-ai/claude-code`, then run `claude` once and sign in with your Claude account.
 - **Set up settings (once):** `cp .env.example .env` (the PostHog key is already filled in; nothing else is required).
 - **Run locally:** `npm start`, then open `http://localhost:3000`. Stop with Ctrl+C.
-- **Run deterministic tests:** `npm test` (20 tests; they use a fake AI, so no sign-in or network is needed)
+- **Run deterministic tests:** `npm test` (26 tests; they use a fake AI, so no sign-in or network is needed)
 - **Run model evals:** none yet. Planned for Build 4 (10 tenant messages scored against the right price list line).
 - **Product Page:** edit `docs/index.html` and push to `main`; GitHub Pages republishes it. Its PostHog snippet and public project token are in the `<head>`.
 
 **On Windows (PowerShell):** type `npm.cmd` instead of `npm` and `claude.cmd` instead of `claude` if PowerShell refuses to run scripts, and use `copy .env.example .env`.
 
-Settings read from `.env`: `AI_PROVIDER` (`claude-code` by default, or `openrouter`), `CLAUDE_MODEL` (optional), `CLAUDE_BIN` (optional path to the `claude` program), `OPENROUTER_API_KEY` and `OPENROUTER_MODEL` (only for `openrouter`), `POSTHOG_KEY`, `POSTHOG_HOST`, `PORT`.
+Settings read from `.env`: `AI_PROVIDER` (`claude-code` by default, or `openrouter`), `CLAUDE_MODEL` (optional), `CLAUDE_BIN` (optional path to the `claude` program), `OPENROUTER_API_KEY` and `OPENROUTER_MODEL` (only for `openrouter`), `POSTHOG_KEY`, `POSTHOG_HOST`, `PORT`. Online only: `HOST`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `AI_DAILY_CALL_LIMIT`.
 
 **About cost:** with `claude-code` the call is covered by the Claude subscription, so nothing is billed per call. The app still shows what the same call would cost on the pay-per-call API (measured $0.02 to $0.035 for text, $0.06 with a photo). This setup is for the local demo only: a deployed app must call a paid API, because a personal subscription cannot serve other users.
 

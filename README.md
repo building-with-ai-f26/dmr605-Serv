@@ -43,7 +43,7 @@ cd dmr605-Serv
 npm install -g @anthropic-ai/claude-code   # once; then run `claude` and sign in
 cp .env.example .env                       # once; Windows: copy .env.example .env
 npm start                                  # open http://localhost:3000
-npm test                                   # 20 checks, no sign-in or network needed
+npm test                                   # 26 checks, no sign-in or network needed
 ```
 
 On Windows PowerShell, use `npm.cmd` in place of `npm` if PowerShell refuses to run scripts.

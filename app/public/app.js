@@ -261,6 +261,7 @@ for (const text of EXAMPLES) {
 }
 
 api('/api/state').then((s) => {
+  if (s.hosted) $('reset').hidden = true; // online, a visitor must not be able to wipe the data
   state = s;
   renderAll();
 });

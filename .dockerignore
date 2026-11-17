@@ -1,0 +1,8 @@
+.git
+.env
+.env.*
+app/data
+app/test
+docs
+journal
+node_modules
