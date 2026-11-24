@@ -189,6 +189,7 @@
       <h2>Living PRD (Product Requirements Document)</h2>
       <p class="meta">Updated every week as we test with real users and learn what works.</p>
 
+      <p class="meta"><strong>PRD v3 (Nov 24): hosting, database, security.</strong> Hosting: Render running the repo's Dockerfile (a Node server cannot run on GitHub Pages). Database: Supabase free plan, one JSON document in an <code>app_state</code> table with Row Level Security on and no public policy; only the server's secret key can touch it, and the browser never talks to the database. AI: OpenRouter with a credit limit set on the key plus a daily call cap in the app. Security: private links for owners and tenants, password for staff, per-unit report limit, login throttling, no secrets in the repo or the page. Details in <a href="https://github.com/building-with-ai-f26/dmr605-serv/blob/main/SECURITY.md">SECURITY.md</a>. The product itself (PRD v2 below) is unchanged.</p>
       <p class="meta"><strong>PRD v2 (Nov 15).</strong> The product changed this week. v1 was a marketplace where renters pick a pro. v2 is a managed service for small landlords. Why is in the Build 2 log below.</p>
 
       <h3>1. Target User & The Job to Be Done</h3>
@@ -266,9 +267,9 @@
       <div class="log-entry">
         <h3>Build 3 · Build.exe: The Core Workflow (Due Nov 23)</h3>
         <ul>
-          <li><strong>What shipped:</strong> [End-to-end workflow working with real inputs + PostHog funnel events]</li>
-          <li><strong>What broke / changed in PRD:</strong> [Fill in]</li>
-          <li><strong>Cost & time this week:</strong> $[0.00] · [0] hours</li>
+          <li><strong>What shipped:</strong> Beginner lane. Nov 24: security audit of the app (attack log and secret search in <code>SECURITY.md</code>), a Shipping section, Ask-me-first list and rules from agent mistakes in <code>AGENTS.md</code>, and PRD v3 (hosting, database, security). [Add the live URL and date once deployed.]</li>
+          <li><strong>What broke / changed in PRD:</strong> The app is a Node server, so GitHub Pages cannot host it; it needs Render, plus Supabase and a paid OpenRouter key, which I set up myself. [Fill in what broke during the deploy.]</li>
+          <li><strong>Cost & time this week:</strong> $[0.00] new spend so far (OpenRouter credit if added: $[ ]) &middot; [ ] hours</li>
         </ul>
       </div>
 
