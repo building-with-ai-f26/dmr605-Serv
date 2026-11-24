@@ -66,6 +66,7 @@ Host: Render (Docker, uses the repo `Dockerfile`), database: Supabase (free plan
 
 ## 4d. Rules learned from agent mistakes
 - **Run every command before writing it down.** In Build 2 the agent wrote `npm test` to point at a folder Node could not run, and the tests never ran. Name test files explicitly in `package.json` and run the command once before saying it works.
+- **A setup guide must be run against a real account.** The first real deploy failed with a 403 (42501) because the `DEPLOY.md` SQL never granted the `service_role` access to `app_state`. The guide had only been tested against a stand-in. Run the steps on a fresh project before calling them done.
 - **Do not assume an account or credits exist.** The agent chose OpenRouter without checking that credits were available; ask before picking a paid provider.
 
 ## 5. Non-Negotiable Engineering Rules

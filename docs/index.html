@@ -268,7 +268,7 @@
         <h3>Build 3 · Build.exe: The Core Workflow (Due Nov 23)</h3>
         <ul>
           <li><strong>What shipped:</strong> Beginner lane. Nov 24: security audit of the app (attack log and secret search in <code>SECURITY.md</code>), a Shipping section, Ask-me-first list and rules from agent mistakes in <code>AGENTS.md</code>, and PRD v3 (hosting, database, security). [Add the live URL and date once deployed.]</li>
-          <li><strong>What broke / changed in PRD:</strong> The app is a Node server, so GitHub Pages cannot host it; it needs Render, plus Supabase and a paid OpenRouter key, which I set up myself. [Fill in what broke during the deploy.]</li>
+          <li><strong>What broke / changed in PRD:</strong> The app is a Node server, so GitHub Pages cannot host it; it needs Render, plus Supabase and a paid OpenRouter key, which I set up myself. The first Render deploy crashed on startup with a Supabase 403 (permission denied for table app_state) because my setup SQL lacked a <code>grant</code> to <code>service_role</code>; I added the grant to <code>DEPLOY.md</code>. I also ran on a free OpenRouter model ($0 key).</li>
           <li><strong>Cost & time this week:</strong> $[0.00] new spend so far (OpenRouter credit if added: $[ ]) &middot; [ ] hours</li>
         </ul>
       </div>
