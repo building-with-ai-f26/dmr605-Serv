@@ -51,7 +51,8 @@ Live-site search (PASS, Nov 24): fetched `/`, `/config.js`, `/common.js`, `/anal
 2. No Content-Security-Policy header yet. Other headers (`nosniff`, `X-Frame-Options`, `no-referrer`) are set.
 3. Everything is one JSON document in one row: fine for a 10-owner trial, not for scale. Photos inflate it.
 4. Per-visitor rate limits are per unit link and per staff login attempt, not per IP, on the report route.
-5. Single staff password, no per-person accounts.
+5. The AI runs on a free OpenRouter model ($0 spend), so the spending cap is trivially met, but the free model is rate-limited and often unsure; reports then go to a person. Before using a paid key, set a credit limit on it.
+6. Single staff password, no per-person accounts.
 
 ## Live test (run after deploy, with the project's public `sb_publishable_` / anon key)
 Back up first (`select * from app_state;` exported as JSON from the Supabase SQL editor). Then in the browser console on the live site:
