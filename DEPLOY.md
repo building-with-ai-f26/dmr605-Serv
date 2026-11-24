@@ -26,6 +26,8 @@ Owners and tenants never sign in: each gets a private link (`/o/...` for an owne
    );
    -- Nothing may read or write this table except the app's own secret key.
    alter table app_state enable row level security;
+   -- New Supabase projects do not give the server's role access by default (error 42501, "permission denied").
+   grant select, insert, update, delete on public.app_state to service_role;
    ```
 
 3. From the project's API settings, copy the project URL and the secret key (called `service_role` on older projects). The secret key can read and write everything: it goes only in the host's settings, never in the browser or in Git.

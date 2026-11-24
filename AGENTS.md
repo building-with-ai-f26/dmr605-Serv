@@ -49,6 +49,26 @@ Settings read from `.env`: `AI_PROVIDER` (`claude-code` by default, or `openrout
 7. **Keep the Claude Code call locked down.** `triage.mjs` starts `claude -p` with only the Read tool (no shell, no file edits), in an empty scratch folder, with this computer's own Claude Code settings, tools and commands switched off, and never with a flag that skips permission checks. Do not loosen this. Tenant messages are untrusted text, so assume one may try to give the model orders.
 8. **No new dependencies without asking.** The app runs with nothing installed; that is a feature.
 
+## 4b. Shipping (how the agent deploys)
+Host: Render (Docker, uses the repo `Dockerfile`), database: Supabase (free plan), AI: OpenRouter. Details and settings table are in `DEPLOY.md`.
+1. Branch from `main`, make the change, run `npm test` (57 tests must pass).
+2. Search for secrets: `grep -rnE "sb_secret_|service_role|sk-or-|sk-ant-|sk-proj-|sk_live_" --exclude-dir=.git .` and confirm only placeholders and test fakes appear.
+3. Open a pull request with the template filled in. Merge only after the human approves.
+4. Render deploys `main`. After deploy, check `/healthz` returns `{"ok":true}`, open a unit link on a phone, send one report, and approve it as the owner.
+5. Check PostHog shows the pageview and a session replay from the live URL.
+6. Roll back by redeploying the previous commit in Render. Data lives in Supabase and is untouched.
+
+## 4c. Ask me first (stop and wait for the human)
+- Deleting data, dropping or changing tables, or running any SQL against the production database.
+- Anything touching keys, secrets, environment variables, or permissions (including the Supabase secret key and the OpenRouter key).
+- Anything that costs money: credits, paid plans, raising a spending cap.
+- Changing the host, the DNS or the public URL, and force-pushing.
+
+## 4d. Rules learned from agent mistakes
+- **Run every command before writing it down.** In Build 2 the agent wrote `npm test` to point at a folder Node could not run, and the tests never ran. Name test files explicitly in `package.json` and run the command once before saying it works.
+- **A setup guide must be run against a real account.** The first real deploy failed with a 403 (42501) because the `DEPLOY.md` SQL never granted the `service_role` access to `app_state`. The guide had only been tested against a stand-in. Run the steps on a fresh project before calling them done.
+- **Do not assume an account or credits exist.** The agent chose OpenRouter without checking that credits were available; ask before picking a paid provider.
+
 ## 5. Non-Negotiable Engineering Rules
 1. **Plan before coding:** Before touching multiple files, propose a brief plan and wait for approval.
 2. **Small batches:** Make small, focused changes that can be reviewed and explained by a human in a single Pull Request.
